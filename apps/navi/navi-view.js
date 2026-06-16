@@ -159,13 +159,13 @@ export class NaviView {
             if (!basePrompt) basePrompt = NAVI_DEFAULTS[feature]?.content || '';
             if (!basePrompt) throw new Error('提示词为空');
 
-            const buildHint = (key, label) => {
+            const buildHint = (key, label, mainWord, desc) => {
                 if (!this._optBool(key)) return '';
                 const text = this._opt(key + '_text').trim();
                 if (text) {
-                    return `【强制要求 - ${label}】以下指定的${label}必须应用到全部6个委托中。每个委托的观测指标都要切实体现这些内容，不能只提一句就跳过，要具体描述如何融入观测过程：\n${text}\n【强制要求结束】`;
+                    return `【强制要求 - ${label}】以下指定的${label}必须作为全部6个委托的${mainWord}。每个委托的观测指标都要切实体现，${desc}：\n${text}\n【强制要求结束】`;
                 }
-                return `【强制要求 - ${label}】你必须为全部6个委托各自原创设计${label}。每个委托的${label}要具体、多样、互不重复。这是硬性要求，不是可选项。\n【强制要求结束】`;
+                return `【强制要求 - ${label}】你必须为全部6个委托各自原创设计${mainWord}。每个委托的${mainWord}要具体、多样、互不重复。这是硬性要求，不是可选项。\n【强制要求结束】`;
             };
 
             const buildTargetHint = () => {
@@ -190,9 +190,9 @@ export class NaviView {
                 .replace(/\{\{DIFFICULTY\}\}/g, difficulty)
                 .replace(/\{\{SUPPLEMENT\}\}/g, this._getSupplement())
                 .replace(/\{\{WORLDBOOK\}\}/g, worldbookText || '无')
-                .replace(/\{\{ACTION_HINT\}\}/g, buildHint('action', '动作指示'))
-                .replace(/\{\{ITEMS_HINT\}\}/g, buildHint('items', '辅助物品'))
-                .replace(/\{\{ASSIST_HINT\}\}/g, buildHint('assist', '协助人员'))
+                .replace(/\{\{ACTION_HINT\}\}/g, buildHint('action', '动作指示', '主要姿势', '具体描述该姿势如何影响乳房和小穴的形态变化'))
+                .replace(/\{\{ITEMS_HINT\}\}/g, buildHint('items', '辅助物品', '主要道具', '具体描述该道具如何用于接触或改变目标状态'))
+                .replace(/\{\{ASSIST_HINT\}\}/g, buildHint('assist', '协助人员', '协助人员及互动方式', '具体描述该人员如何参与互动及对观测的贡献'))
                 .replace(/\{\{TARGET_HINT\}\}/g, buildTargetHint());
 
             const result = await api.callAI([
