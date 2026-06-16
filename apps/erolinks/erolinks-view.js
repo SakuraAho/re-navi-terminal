@@ -75,7 +75,7 @@ _getPrompt(){return window.VirtualPhone?.promptManager?.getPromptForFeature('ero
 【饰品】
 - 物品名（颜色/材质简述）
 
-NSFW默认填"无"。服装按实际穿搭列出，每个部位可以有多个物品。体龄匹配。
+NSFW字段规则：所有隐私数据默认填"未知"。只有从世界书或聊天记录中能明确确认的才填具体内容。严禁推测编造。刷新可读取剧情推进后新暴露的信息。
 
 上下文：【世界书角色设定】{{WORLDBOOK}}【最近聊天记录】{{CHAT}}`;}
 async _renderWBList(){const container=document.getElementById('erolinks-worldbook-list');const mgr=window.VirtualPhone?.worldbookManager;if(!container||!mgr)return;this._wbRendered=true;try{const sources=await mgr.listAvailableWorldbooks({includeEntries:true,force:true});const sel=mgr.getSelectionState('erolinks');if(!sources?.length){container.innerHTML='<div style="font-size:11px;color:#888;padding:6px 0;">未读取到酒馆世界书列表</div>';return;}const sorted=[...sources].sort((a,b)=>{const aS=sel.initialized&&mgr.matchesSelection?.(a,sel.ids)?1:0;const bS=sel.initialized&&mgr.matchesSelection?.(b,sel.ids)?1:0;return bS-aS;});container.innerHTML=sorted.map(s=>{const checked=sel.initialized&&mgr.matchesSelection?.(s,sel.ids)?'checked':'';const active=Number(s.entries?.length||0);const total=Number(s.totalEntries??active);return`<label class="erolinks-wb-item"><input type="checkbox" class="erolinks-wb-cb" value="${this._esc(s.id)}" ${checked}><span class="erolinks-wb-name">${this._esc(s.name)}</span><span class="erolinks-wb-meta">${total>active?active+'/'+total+' 条':active+' 条'}</span></label>`;}).join('');container.querySelectorAll('.erolinks-wb-cb').forEach(cb=>{cb.addEventListener('change',()=>{const ids=[];container.querySelectorAll('.erolinks-wb-cb').forEach(c=>{if(c.checked)ids.push(c.value);});mgr.setSelection('erolinks',ids);});});}catch(e){container.innerHTML='<div style="font-size:11px;color:#d93025;padding:6px 0;">世界书读取失败</div>';}}}
