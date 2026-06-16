@@ -11,7 +11,6 @@ export const NAVI_DEFAULTS = {
 设定补全：{{SUPPLEMENT}}
 时间：{{STORY_DATE}} {{STORY_TIME}}
 世界书参考：{{WORLDBOOK}}
-最近对话：{{LAST_MESSAGE}}
 
 {{ACTION_HINT}}
 {{ITEMS_HINT}}
@@ -68,7 +67,6 @@ export const NAVI_DEFAULTS = {
 设定补全：{{SUPPLEMENT}}
 时间：{{STORY_DATE}} {{STORY_TIME}}
 世界书参考：{{WORLDBOOK}}
-最近对话：{{LAST_MESSAGE}}
 
 {{ACTION_HINT}}
 {{ITEMS_HINT}}

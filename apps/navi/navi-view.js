@@ -174,20 +174,12 @@ export class NaviView {
                 worldbookText = wbMsg?.content || '';
             } catch (e) { /* 无世界书管理器则跳过 */ }
 
-            // 最近对话
-            let lastMessageText = '（无）';
-            if (context?.chat?.length > 0) {
-                const lm = context.chat[context.chat.length - 1];
-                lastMessageText = `${lm.name || '??'}: ${String(lm.mes || '').substring(0, 1500)}`;
-            }
-
             const systemPrompt = basePrompt
                 .replace(/\{\{STORY_TIME\}\}/g, tm?.getFormattedTime?.() || '')
                 .replace(/\{\{STORY_DATE\}\}/g, tm?.getFormattedDate?.() || '')
                 .replace(/\{\{DIFFICULTY\}\}/g, difficulty)
                 .replace(/\{\{SUPPLEMENT\}\}/g, this._getSupplement())
                 .replace(/\{\{WORLDBOOK\}\}/g, worldbookText || '无')
-                .replace(/\{\{LAST_MESSAGE\}\}/g, lastMessageText)
                 .replace(/\{\{ACTION_HINT\}\}/g, buildHint('action', '动作指示'))
                 .replace(/\{\{ITEMS_HINT\}\}/g, buildHint('items', '辅助物品'))
                 .replace(/\{\{ASSIST_HINT\}\}/g, buildHint('assist', '协助人员'));
