@@ -18,7 +18,7 @@ activateControl(){this._controlMode=true;this._outfitChanges={};this.render();}
 _renderMain(){return`<div class="erolinks-app"><div class="erolinks-bar"><div class="erolinks-bar-btn" onclick="window.VirtualPhone._erolinksView.goSettings()">⚙️</div></div><div class="erolinks-main"><div class="erolinks-link-btn ${this._loading?'loading':''}" onclick="window.VirtualPhone._erolinksView.doScan()"><div class="erolinks-link-ring"></div><div class="erolinks-link-text">${this._loading?'⏳':'SCAN'}</div>${this._loading?'<div class="erolinks-link-sub">扫描中...</div>':''}</div><div class="erolinks-hint">扫描当前对话中的角色</div></div></div>`;}
 
 // === 扫描结果 ===
-_renderScanResult(){return`<div class="erolinks-app"><div class="erolinks-bar"><div class="erolinks-bar-btn" onclick="window.VirtualPhone._erolinksView.goMain()" style="margin-right:auto;">← 返回</div></div><div class="erolinks-scroll"><div class="erolinks-section" style="padding:16px 14px;"><div class="erolinks-section-title">📡 扫描到 ${this._scanChars.length} 个角色</div>${this._scanChars.map((ch,i)=>`<div class="el-char-card" onclick="window.VirtualPhone._erolinksView.selectChar(${i})"><div class="el-char-card-name">${this._esc(ch.name)}</div><div class="el-char-card-desc">${this._esc(ch.desc||'')}</div><button class="el-char-card-btn" onclick="event.stopPropagation();window.VirtualPhone._erolinksView.selectChar(${i})">🔗 链接</button></div>`).join('')}</div></div></div>`;}
+_renderScanResult(){return`<div class="erolinks-app"><div class="erolinks-bar"><div class="erolinks-bar-btn" onclick="window.VirtualPhone._erolinksView.goMain()" style="margin-right:auto;">← 返回</div></div><div class="erolinks-scroll"><div class="erolinks-section" style="padding:16px 14px;"><div class="erolinks-section-title">📡 扫描到 ${this._scanChars.length} 个角色</div>${this._scanChars.map((ch,i)=>`<div class="el-char-card" onclick="window.VirtualPhone._erolinksView.selectChar(${i})"><div class="el-char-card-avatar">${this._esc(ch.name).charAt(0)}</div><div class="el-char-card-body"><div class="el-char-card-name">${this._esc(ch.name)}</div><div class="el-char-card-desc">${this._esc(ch.desc||'点击链接此角色')}</div></div><div class="el-char-card-arrow">›</div></div>`).join('')}</div></div></div>`;}
 selectChar(idx){this._selectedChar=this._scanChars[idx];this._linkChar();}
 
 // === 链接角色 ===
@@ -36,8 +36,8 @@ async doScan(){if(this._loading)return;this._loading=true;this._scanChars=[];thi
 // === 链接提示词 ===
 _getLinkPrompt(charName,worldbookText,chatText){const confirmed=this._getConfirmedText();return`你是EroLinks身心链接模块。请链接角色【${charName}】，按以下顺序输出：
 
-第一步——基础信息（匹配世界书）：
-如果世界书中有【${charName}】的设定，从世界书提取：姓名、种族、年龄、身份、所属。如无匹配则只填已知信息。
+第一步——基础信息（严格匹配世界书）：
+如果世界书中存在角色名恰好为【${charName}】的设定，才从世界书提取：姓名、种族、年龄、身份、所属。如果世界书角色名与【${charName}】不完全相同，严禁使用世界书中的角色数据，只能根据聊天记录填写目前已知的信息。绝不能因为世界书中有其他角色就把那个角色的信息填进来。
 
 第二步——动态推断：
 心率(仅输出数字60-120)、体温(仅输出数字如36.5)、状态、活动、位置、好感、心理所想(第一人称一句)
