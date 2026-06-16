@@ -88,6 +88,7 @@ export class NaviView {
                 ${this._renderOptToggle('action', '🏃 动作指示', '指定目标的身体姿态或动作（如弯腰、四足着地、跳跃等），留空则由AI随机生成')}
                 ${this._renderOptToggle('items', '🧴 辅助物品', '指定辅助物品（如羽毛、精油、冰块、丝带、软刷等），留空则由AI随机生成')}
                 ${this._renderOptToggle('assist', '👥 协助人员', '指定协助人员（如目标自己、另一位少女等），留空则由AI随机生成')}
+                ${this._renderOptToggle('target', '🎯 对象指定', '指定目标角色名（如：美咲）。留空则由AI从世界书随机选择一名角色，统一为全部6个委托的目标')}
             </div>
             <div class="navi-section">
                 <div class="navi-section-title">📊 选择难度</div>
@@ -167,6 +168,15 @@ export class NaviView {
                 return `【强制要求 - ${label}】你必须为全部6个委托各自原创设计${label}。每个委托的${label}要具体、多样、互不重复。这是硬性要求，不是可选项。\n【强制要求结束】`;
             };
 
+            const buildTargetHint = () => {
+                if (!this._optBool('target')) return '';
+                const text = this._opt('target_text').trim();
+                if (text) {
+                    return `【强制要求 - 对象指定】全部6个委托的目标固定为【${text}】。世界书有则提取其种族/年龄/胸穴，无则自行设定，6个委托中该角色的信息保持完全一致。需要生成6种不同的委托方式，互不重复。\n【强制要求结束】`;
+                }
+                return '【强制要求 - 对象指定】从世界书中随机选择一名角色（无世界书则自行创建一名），作为全部6个委托的统一目标。该角色的种族/年龄/胸穴信息在6个委托中保持完全一致，但委托方式需6种各不相同。\n【强制要求结束】';
+            };
+
             // 世界书
             let worldbookText = '';
             try {
@@ -182,7 +192,8 @@ export class NaviView {
                 .replace(/\{\{WORLDBOOK\}\}/g, worldbookText || '无')
                 .replace(/\{\{ACTION_HINT\}\}/g, buildHint('action', '动作指示'))
                 .replace(/\{\{ITEMS_HINT\}\}/g, buildHint('items', '辅助物品'))
-                .replace(/\{\{ASSIST_HINT\}\}/g, buildHint('assist', '协助人员'));
+                .replace(/\{\{ASSIST_HINT\}\}/g, buildHint('assist', '协助人员'))
+                .replace(/\{\{TARGET_HINT\}\}/g, buildTargetHint());
 
             const result = await api.callAI([
                 { role: 'system', content: systemPrompt },
@@ -339,9 +350,12 @@ export class NaviView {
                 if (!confirm('恢复默认提示词？')) return;
                 const feature = btn.dataset.reset;
                 const ta = root.querySelector('#navi-s-prompt-' + (feature === 'observation' ? 'obs' : 'play'));
-                const content = window.VirtualPhone?.promptManager?.resetPromptToDefault('navi', feature);
-                if (ta && content) ta.value = content;
-                this.app.phoneShell?.showNotification?.('已恢复', '', '✅');
+                const content = NAVI_DEFAULTS[feature]?.content || '';
+                if (ta && content) {
+                    ta.value = content;
+                    try { window.VirtualPhone?.promptManager?.updatePrompt('navi', feature, content); } catch (e) {}
+                    this.app.phoneShell?.showNotification?.('已恢复', '', '✅');
+                }
             });
         });
 
