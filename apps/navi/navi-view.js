@@ -196,8 +196,8 @@ export class NaviView {
                 if (this._optBool('items')) {
                     const t = this._opt('items_text').trim();
                     items.push(t ?
-                        `辅助物品：主要交互道具固定为"${t}"。` :
-                        '辅助物品：为每个委托设计不同的主要交互道具。');
+                        `辅助物品：核心交互工具固定为"${t}"，必须出现在每个委托中并实际参与互动。` :
+                        '辅助物品：为每个委托指定不同的核心交互工具，必须实际参与互动。');
                 }
                 if (this._optBool('assist')) {
                     items.push(assistName ?
@@ -222,7 +222,7 @@ export class NaviView {
                 .replace(/\{\{SUPPLEMENT\}\}/g, this._getSupplement())
                 .replace(/\{\{WORLDBOOK\}\}/g, worldbookText || '无')
                 .replace(/\{\{ACTION_HINT\}\}/g, buildHint('action', '动作指示', '主要姿势', '具体描述该姿势如何影响乳房和小穴的形态变化'))
-                .replace(/\{\{ITEMS_HINT\}\}/g, buildHint('items', '辅助物品', '主要交互道具', '具体描述该道具如何用于接触或改变目标状态'))
+                .replace(/\{\{ITEMS_HINT\}\}/g, (()=>{if(!this._optBool('items'))return'';const t=this._opt('items_text').trim();if(t)return`【强制要求 - 辅助物品】以下道具必须出现在全部6个委托中，并作为核心交互工具被实际使用。每个委托的观测指标必须具体描写该道具参与互动的过程和效果：\n${t}\n【强制要求结束】`;return'【强制要求 - 辅助物品】你必须为全部6个委托各自指定一个核心交互工具。每个委托的工具必须不同，且必须在观测指标中具体描写该工具实际参与互动的过程和效果。这是硬性要求，不是可选项。\n【强制要求结束】';})())
                 .replace(/\{\{ASSIST_HINT\}\}/g, (()=>{const h=buildHint('assist','协助人员','协助人员及互动方式','具体描述该人员如何参与互动及对观测的贡献');if(!h)return'';const t=this._opt('assist_text').trim();if(t&&(t.includes('目标自己')||t.includes('自身')||t.includes('本人')))return h.replace('【强制要求结束】','若协助人员为【目标自己】，则全部委托必须由目标主动执行观测动作（如自己用手扒开小穴、自行摆出姿势、自慰展示、用自己的手揉捏乳房等），体己师转为辅助与观测角色，不主导交互。\n【强制要求结束】');return h;})())
                 .replace(/\{\{TARGET_HINT\}\}/g, buildTargetHint())
                 .replace(/\{\{CONSTRAINTS\}\}/g, buildConstraints());
