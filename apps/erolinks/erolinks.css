@@ -83,6 +83,12 @@
 .el-secret-label{font-size:10px;color:rgba(255,150,180,0.5);margin-bottom:3px;display:block;}
 .el-secret-val{font-size:12px;color:rgba(255,200,220,0.8);line-height:1.5;display:block;}
 
+/* ===== 人形服装图 ===== */
+.el-figure-wrap{display:flex;justify-content:center;padding:16px 14px 8px;}
+.el-figure-svg{width:160px;height:auto;}
+.el-fig-zone{cursor:pointer;transition:all 0.2s;}
+.el-fig-zone:hover{stroke:rgba(255,255,255,0.4) !important;filter:url(#el-glow);}
+
 /* ===== 服装 ===== */
 .el-outfit-scroll{flex:1;overflow-y:auto;-webkit-overflow-scrolling:touch;padding:0 14px 20px;}
 .el-outfit-zone{margin-bottom:12px;}
