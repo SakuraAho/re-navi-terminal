@@ -177,6 +177,37 @@ export class NaviView {
                 return '【强制要求 - 对象指定】从世界书中随机选择一名角色（无世界书则自行创建一名），作为全部6个委托的统一目标。该角色的种族/年龄/胸穴信息在6个委托中保持完全一致，但委托方式需6种各不相同。\n【强制要求结束】';
             };
 
+            const buildConstraints = () => {
+                const items = [];
+                const targetName = this._optBool('target') ? this._opt('target_text').trim() : '';
+                const assistName = this._optBool('assist') ? this._opt('assist_text').trim() : '';
+                const isSelf = assistName && targetName && assistName === targetName;
+                if (this._optBool('target')) {
+                    items.push(targetName ?
+                        `对象指定：全部6个委托目标固定为【${targetName}】，同一角色6种不同委托方式${isSelf?'（目标同时担任协助者，需主动执行观测动作）':''}。` :
+                        '对象指定：从世界书随机选一名角色作为全部6个委托的统一目标。');
+                }
+                if (this._optBool('action')) {
+                    const t = this._opt('action_text').trim();
+                    items.push(t ?
+                        `动作指示：主要姿势固定为"${t}"。` :
+                        '动作指示：为每个委托设计不同的主要姿势。');
+                }
+                if (this._optBool('items')) {
+                    const t = this._opt('items_text').trim();
+                    items.push(t ?
+                        `辅助物品：主要道具固定为"${t}"。` :
+                        '辅助物品：为每个委托设计不同的主要道具。');
+                }
+                if (this._optBool('assist')) {
+                    items.push(assistName ?
+                        `协助人员：协助者为"${assistName}"${isSelf||assistName.includes('目标自己')||assistName.includes('自身')?'（由目标主动执行全部观测动作，体己师转为辅助与观测角色）':''}。` :
+                        '协助人员：为每个委托指定不同的协助者。');
+                }
+                if (!items.length) return '';
+                return '⚠️ 当前生效的强制约束（以下规则优先级最高，必须全部遵守）：\n' + items.map((s,i) => (i+1)+'. '+s).join('\n');
+            };
+
             // 世界书
             let worldbookText = '';
             try {
@@ -193,7 +224,8 @@ export class NaviView {
                 .replace(/\{\{ACTION_HINT\}\}/g, buildHint('action', '动作指示', '主要姿势', '具体描述该姿势如何影响乳房和小穴的形态变化'))
                 .replace(/\{\{ITEMS_HINT\}\}/g, buildHint('items', '辅助物品', '主要道具', '具体描述该道具如何用于接触或改变目标状态'))
                 .replace(/\{\{ASSIST_HINT\}\}/g, (()=>{const h=buildHint('assist','协助人员','协助人员及互动方式','具体描述该人员如何参与互动及对观测的贡献');if(!h)return'';const t=this._opt('assist_text').trim();if(t&&(t.includes('目标自己')||t.includes('自身')||t.includes('本人')))return h.replace('【强制要求结束】','若协助人员为【目标自己】，则全部委托必须由目标主动执行观测动作（如自己用手扒开小穴、自行摆出姿势、自慰展示、用自己的手揉捏乳房等），体己师转为辅助与观测角色，不主导交互。\n【强制要求结束】');return h;})())
-                .replace(/\{\{TARGET_HINT\}\}/g, buildTargetHint());
+                .replace(/\{\{TARGET_HINT\}\}/g, buildTargetHint())
+                .replace(/\{\{CONSTRAINTS\}\}/g, buildConstraints());
 
             const result = await api.callAI([
                 { role: 'system', content: systemPrompt },
