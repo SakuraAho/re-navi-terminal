@@ -1,0 +1,15 @@
+/* N.A.V.I. Terminal 独立面板 */
+#navi-term-panel{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;}
+#navi-term-header{display:flex;justify-content:space-between;align-items:center;padding:10px 14px;background:rgba(255,255,255,0.04);border-bottom:1px solid rgba(255,255,255,0.06);flex-shrink:0;}
+#navi-term-title{font-size:14px;font-weight:600;color:#ddd;}
+#navi-term-close{font-size:18px;color:#888;cursor:pointer;padding:0 6px;}
+#navi-term-close:hover{color:#fff;}
+#navi-term-body{flex:1;overflow:hidden;position:relative;display:flex;flex-direction:column;}
+#navi-term-home{flex:1;display:flex;align-items:flex-start;justify-content:center;padding:40px 14px;}
+#navi-term-app{flex:1;overflow:hidden;display:flex;flex-direction:column;position:relative;}
+.nt-app-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px;width:100%;max-width:300px;}
+.nt-app-card{background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.08);border-radius:14px;padding:24px 16px;text-align:center;cursor:pointer;transition:all 0.2s;}
+.nt-app-card:hover{background:rgba(255,255,255,0.08);border-color:rgba(255,255,255,0.15);transform:translateY(-2px);}
+.nt-app-icon{font-size:32px;margin-bottom:8px;}
+.nt-app-name{font-size:13px;font-weight:600;color:#ccc;}
+#navi-term-btn:hover{box-shadow:0 4px 16px rgba(0,0,0,0.4) !important;}
