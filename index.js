@@ -103,38 +103,43 @@ async function openApp(appId) {
         return;
     }
 
-    appEl.innerHTML = '<div style="color:#888;text-align:center;padding:60px;">加载中...</div>';
+    // Setup app container
+    const appWrap = document.createElement('div');
+    appWrap.style.cssText = 'flex:1;position:relative;overflow:hidden;display:flex;flex-direction:column;';
+    // Back bar
+    const backBar = document.createElement('div');
+    backBar.style.cssText = 'flex-shrink:0;padding:6px 10px;border-bottom:1px solid rgba(255,255,255,0.06);';
+    backBar.innerHTML = '<button id="nt-back-btn" style="background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.1);color:#aaa;padding:3px 12px;border-radius:8px;cursor:pointer;font-size:12px;">← 返回</button>';
+    backBar.querySelector('button').onclick = () => {
+        appEl.innerHTML = ''; appEl.style.display = 'none';
+        homeEl.style.display = 'block';
+        titleEl.textContent = 'N.A.V.I. Terminal';
+        delete window._naviTermCurrentApp;
+    };
+    // App content area (where setContent writes)
+    const appContent = document.createElement('div');
+    appContent.id = 'nt-app-content';
+    appContent.style.cssText = 'flex:1;overflow:hidden;';
+    appWrap.appendChild(backBar);
+    appWrap.appendChild(appContent);
+    appEl.innerHTML = '';
+    appEl.appendChild(appWrap);
     homeEl.style.display = 'none';
     appEl.style.display = 'flex';
 
     try {
         const mod = await import(appModules[appId]);
         const AppClass = mod[appId === 'navi' ? 'NaviApp' : 'EroLinksApp'];
-        const shell = new TermShell(appEl);
+        const shell = new TermShell(appContent);
         const inst = new AppClass(shell, VP.storage);
         inst.phoneShell = shell;
-        // NaviApp uses 'naviView', EroLinksApp uses 'view'
         const view = inst.view || inst.naviView || inst.erolinksView;
         if (view) view.app = inst;
         inst.render();
         if (appId === 'navi') titleEl.textContent = '🎯 观测委托';
         else if (appId === 'erolinks') titleEl.textContent = '🔗 EroLinks';
-        // Store for potential use
         window._naviTermCurrentApp = inst;
         window._naviTermAppId = appId;
-
-        // Back button handling — add a back bar
-        const backBar = document.createElement('div');
-        backBar.innerHTML = '<button style="background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.1);color:#aaa;padding:3px 12px;border-radius:8px;cursor:pointer;font-size:12px;">← 返回</button>';
-        backBar.style.cssText = 'position:absolute;top:6px;left:10px;z-index:10;';
-        backBar.querySelector('button').onclick = () => {
-            appEl.innerHTML = ''; appEl.style.display = 'none';
-            homeEl.style.display = 'block';
-            titleEl.textContent = 'N.A.V.I. Terminal';
-            delete window._naviTermCurrentApp;
-        };
-        appEl.style.position = 'relative';
-        appEl.appendChild(backBar);
     } catch (err) {
         console.error('[NAVI-Term] 加载失败:', err);
         appEl.innerHTML = '<div style="color:#ff8080;text-align:center;padding:40px;">加载失败: ' + (err.message||'未知错误') + '</div>';
