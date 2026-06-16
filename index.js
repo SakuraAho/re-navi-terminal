@@ -54,6 +54,12 @@ function togglePanel() {
         panel.innerHTML = `<div id="navi-term-header"><span id="navi-term-title">N.A.V.I. Terminal</span><span id="navi-term-close" onclick="document.getElementById('navi-term-panel').style.display='none';window._naviTermOpen=false;">✕</span></div><div id="navi-term-body"><div id="navi-term-home"><div class="nt-app-grid"><div class="nt-app-card" data-app="navi"><div class="nt-app-icon">🎯</div><div class="nt-app-name">观测委托</div></div><div class="nt-app-card" data-app="erolinks"><div class="nt-app-icon">🔗</div><div class="nt-app-name">EroLinks</div></div></div></div><div id="navi-term-app"></div></div>`;
         panel.style.cssText = 'position:fixed;z-index:2147483630;right:10px;top:10%;width:380px;max-width:calc(100vw-20px);height:min(680px,80vh);background:#1a1a2e;border-radius:16px;border:1px solid rgba(255,255,255,0.1);box-shadow:0 8px 40px rgba(0,0,0,0.5);display:flex;flex-direction:column;overflow:hidden;resize:both;min-width:320px;min-height:400px;';
         document.body.appendChild(panel);
+        // Make panel draggable via header
+        const header = panel.querySelector('#navi-term-header');
+        let pdrag=false,px=0,py=0;
+        header.onmousedown=(e)=>{pdrag=true;px=e.clientX-panel.offsetLeft;py=e.clientY-panel.offsetTop;panel.style.transition='none';};
+        document.addEventListener('mousemove',(e)=>{if(!pdrag)return;panel.style.left=(e.clientX-px)+'px';panel.style.top=(e.clientY-py)+'px';panel.style.right='auto';});
+        document.addEventListener('mouseup',()=>{pdrag=false;panel.style.transition='';});
 
         // App cards click
         panel.querySelectorAll('.nt-app-card').forEach(card => {
@@ -106,10 +112,10 @@ async function openApp(appId) {
         const AppClass = mod[appId === 'navi' ? 'NaviApp' : 'EroLinksApp'];
         const shell = new TermShell(appEl);
         const inst = new AppClass(shell, VP.storage);
-        // Override: use our shell instead of phoneShell
         inst.phoneShell = shell;
-        inst.view.app = inst;
-        if (inst.view) inst.view.app = inst;
+        // NaviApp uses 'naviView', EroLinksApp uses 'view'
+        const view = inst.view || inst.naviView || inst.erolinksView;
+        if (view) view.app = inst;
         inst.render();
         if (appId === 'navi') titleEl.textContent = '🎯 观测委托';
         else if (appId === 'erolinks') titleEl.textContent = '🔗 EroLinks';

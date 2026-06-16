@@ -1,6 +1,6 @@
 /* N.A.V.I. Terminal 独立面板 */
 #navi-term-panel{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;}
-#navi-term-header{display:flex;justify-content:space-between;align-items:center;padding:10px 14px;background:rgba(255,255,255,0.04);border-bottom:1px solid rgba(255,255,255,0.06);flex-shrink:0;}
+#navi-term-header{display:flex;justify-content:space-between;align-items:center;padding:10px 14px;background:rgba(255,255,255,0.04);border-bottom:1px solid rgba(255,255,255,0.06);flex-shrink:0;cursor:move;}
 #navi-term-title{font-size:14px;font-weight:600;color:#ddd;}
 #navi-term-close{font-size:18px;color:#888;cursor:pointer;padding:0 6px;}
 #navi-term-close:hover{color:#fff;}
