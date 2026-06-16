@@ -136,7 +136,7 @@ export class NaviView {
     async generate(difficulty) {
         if (this._generating) return;
         // 保存所有textarea内容
-        ['action', 'items', 'assist'].forEach(key => {
+        ['action', 'items', 'assist', 'target'].forEach(key => {
             if (this._optBool(key)) {
                 const ta = document.getElementById('navi-opt-' + key + '-text');
                 if (ta) this._setOpt(key + '_text', ta.value);
