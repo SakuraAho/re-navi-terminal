@@ -62,6 +62,11 @@
 .navi-s-btn { flex:1; padding:8px; border:none; border-radius:8px; font-size:13px; cursor:pointer; font-weight:500; }
 .navi-s-btn-primary { background:#00bcd4; color:#fff; }
 .navi-s-btn-warn { background:#fff; color:#ff4d4f; border:1px solid rgba(255,77,79,0.3); }
+.navi-s-row { display:flex; align-items:center; justify-content:space-between; font-size:13px; color:#333; gap:10px; }
+.navi-wb-item { display:flex; align-items:center; gap:8px; padding:7px 0; font-size:12px; color:#333; cursor:pointer; border-bottom:1px solid rgba(0,0,0,0.06); }
+.navi-wb-item:last-child { border-bottom:none; }
+.navi-wb-item input[type="checkbox"] { accent-color:#00bcd4; flex-shrink:0; }
+.navi-wb-name { flex:1; color:#333; }
 
 /* toggle */
 .toggle-switch { position:relative; display:inline-block; width:44px; height:24px; }

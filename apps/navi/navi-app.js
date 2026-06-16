@@ -14,11 +14,13 @@
 // ========================================
 
 import { NaviView } from './navi-view.js';
+import { ensureNaviPrompts } from './navi-prompts.js';
 
 export class NaviApp {
     constructor(phoneShell, storage) {
         this.phoneShell = phoneShell;
         this.storage = storage;
+        ensureNaviPrompts(storage);
         this.naviView = new NaviView(this);
 
         window.addEventListener('phone:swipeBack', (e) => this.handleSwipeBack(e));
