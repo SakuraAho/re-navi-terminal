@@ -84,7 +84,7 @@ export function normalizeProfile(d) {
         kink: String(d.kink || ''),
         bodyChange: String(d.bodyChange || ''),
         thought: String(d.thought || ''),
-        outfit: d.outfit && typeof d.outfit === 'object' ? d.outfit : {},
+        outfit: normalizeOutfit(d.outfit && typeof d.outfit === 'object' ? d.outfit : {}),
         updatedAt: Number(d.updatedAt) || Date.now()
     };
     return out;
@@ -118,13 +118,45 @@ export function removeProfile(name) {
     return list;
 }
 
-function outfitHasItems(outfit) {
+/** 是否有任意服装槽数据（含明确的未穿着/待确认标记） */
+export function outfitHasItems(outfit) {
     if (!outfit || typeof outfit !== 'object') return false;
     return Object.values(outfit).some((arr) => Array.isArray(arr) && arr.length > 0);
 }
 
 export function emptyOutfit() {
     return { head: [], neck: [], upper: [], hands: [], lower: [], legs: [], acc: [] };
+}
+
+/** 规范单槽：bare/pending/item/hair 都保留，禁止把「未穿着」丢成空数组 */
+export function normalizeOutfitSlot(item) {
+    const st = outfitSlotState(item);
+    if (st.state === 'bare') return { name: '未穿着', desc: '', bare: true };
+    if (st.state === 'pending') return { name: '待确认', desc: '', pending: true };
+    if (st.state === 'hair') return { name: st.name, desc: st.desc, hair: true };
+    return { name: st.name, desc: st.desc || '' };
+}
+
+export function normalizeOutfit(outfit) {
+    const base = emptyOutfit();
+    if (!outfit || typeof outfit !== 'object') return base;
+    Object.keys(base).forEach((z) => {
+        const arr = Array.isArray(outfit[z]) ? outfit[z] : [];
+        base[z] = arr.map(normalizeOutfitSlot).filter(Boolean);
+    });
+    return base;
+}
+
+/** 分区合并：patch 某区有条目则覆盖该区；否则保留 base */
+export function mergeOutfit(baseOutfit, patchOutfit) {
+    const b = normalizeOutfit(baseOutfit);
+    const p = normalizeOutfit(patchOutfit);
+    if (!outfitHasItems(p)) return b;
+    const out = emptyOutfit();
+    Object.keys(out).forEach((z) => {
+        out[z] = p[z].length ? p[z] : b[z];
+    });
+    return out;
 }
 
 /** 非空才写入；避免 AI 漏字段把旧档案刷成空白 */
@@ -143,7 +175,7 @@ export function mergeProfiles(base, patch, mode = 'full') {
             if (f === 'charName') return;
             out[f] = pickFilled(b[f], p[f]);
         });
-        out.outfit = outfitHasItems(p.outfit) ? p.outfit : b.outfit;
+        out.outfit = mergeOutfit(b.outfit, p.outfit);
         return normalizeProfile(out);
     }
     if (mode === 'status') {
@@ -156,7 +188,7 @@ export function mergeProfiles(base, patch, mode = 'full') {
     if (mode === 'outfit') {
         return normalizeProfile({
             ...b,
-            outfit: outfitHasItems(p.outfit) ? p.outfit : b.outfit,
+            outfit: mergeOutfit(b.outfit, p.outfit),
             updatedAt: Date.now()
         });
     }

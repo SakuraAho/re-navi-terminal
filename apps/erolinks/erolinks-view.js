@@ -45,7 +45,7 @@ export class EroLinksView {
         if (window.NaviTerm) window.NaviTerm.erolinksView = this;
         Bridge.ensurePromptDefaults('erolinks', {
             link: { enabled: true, name: 'EroLinks LINK', content: this._getDefaultLinkPrompt('[世界书内容]', '[聊天记录]'), order: 10 }
-        }, 6);
+        }, 7);
     }
 
     _esc(v) { return Bridge.escapeHtml(v); }
@@ -203,7 +203,13 @@ export class EroLinksView {
         const ex = (label) => this._extractField(text, label);
         let outfitRaw = '';
         const outfitIdx = text.indexOf('【服装穿着】');
-        if (outfitIdx !== -1) outfitRaw = text.substring(outfitIdx + 6).trim();
+        if (outfitIdx !== -1) {
+            outfitRaw = text.substring(outfitIdx + '【服装穿着】'.length).trim();
+        } else {
+            // 兼容无总标题、直接从【帽子】开始
+            const hatIdx = text.indexOf('【帽子】');
+            if (hatIdx !== -1) outfitRaw = text.substring(hatIdx).trim();
+        }
         return {
             charName: ex('链接角色') || '角色',
             race: ex('种族'),
@@ -340,7 +346,7 @@ export class EroLinksView {
         if (mode === 'status') {
             extra.push('【本次范围】只更新可探测动态：活动、位置、好感、心率(纯数字)、体温(纯数字)、状态、湿润、快感、身体变化、心理所想(可察神情)。禁止对这些字段输出「未知」。秘密类可略。');
         } else if (mode === 'outfit') {
-            extra.push('【本次范围】只更新服装各分区。【链接角色】必须正确。服装优先级：①世界书着装 ②正文明确变更则改 ③正文无变更沿用世界书 ④世界书也未写该槽→"- 待确认"。明确无衣才"- 无/未穿着"。禁止默认全裸、禁止"未提及"。');
+            extra.push('【本次范围】只更新服装。【链接角色】正确。优先级：世界书着装→正文变更覆盖→无变更保持世界书→两边都无才待确认。正文「脱掉X」对应槽必须"- 无"。世界书写明日常全裸则各衣槽"- 无"。禁止无依据默认全裸，禁止"未提及"。');
         }
         return extra.length ? `${base}\n\n${extra.join('\n')}` : base;
     }
@@ -357,23 +363,8 @@ export class EroLinksView {
         });
         p.heartRate = EStore.digitsOnly(p.heartRate, '72');
         p.temp = EStore.digitsOnly(p.temp, '36.5');
-        // 服装：空分区保持空数组，展示层按未穿着；把「无」规范掉
-        if (p.outfit && typeof p.outfit === 'object') {
-            const o = { ...EStore.emptyOutfit(), ...p.outfit };
-            Object.keys(o).forEach((z) => {
-                const arr = Array.isArray(o[z]) ? o[z] : [];
-                o[z] = arr
-                    .map((it) => {
-                        const st = EStore.outfitSlotState(it);
-                        if (st.state === 'bare') return null;
-                        if (st.state === 'pending') return { name: '待确认', desc: '' };
-                        if (st.state === 'hair') return { name: st.name, desc: st.desc, hair: true };
-                        return { name: st.name, desc: st.desc };
-                    })
-                    .filter(Boolean);
-            });
-            p.outfit = o;
-        }
+        // 保留未穿着/待确认/衣物，禁止把「无」丢掉导致 UI 全变待确认
+        p.outfit = EStore.normalizeOutfit(p.outfit);
         return p;
     }
 
@@ -381,10 +372,10 @@ export class EroLinksView {
         return `你是EroLinks链接模块。根据世界书与聊天记录输出角色可探测状态。
 
 【世界书优先】
-1. 先根据世界书（含岛国设定与角色条目）确定默认状态。
+1. 先根据世界书（社会设定+同名角色条目）确定默认状态与默认着装。
 2. 再看聊天/正文是否有明确变更；有变更以正文为准。
-3. 无变更则保持世界书默认（例如日常全裸→服装各槽为未穿着）。
-4. 仅同名角色条目可用于该角色基础信息；勿把其他角色数据套用过来。
+3. 正文无变更 → 完全沿用世界书。
+4. 仅同名角色条目可用于该角色基础信息；勿张冠李戴。
 
 【可探测字段——禁止输出「未知」】
 种族、年龄、身份、所属、当前活动、所在位置、好感度、当前状态、胸部、小穴、敏感部位、湿润状态、快感阶段、身体变化、心理所想：
@@ -397,17 +388,17 @@ export class EroLinksView {
 性经验、最近性行为、自慰频率、最近自慰、生理周期、当前欲望、幻想内容、秘密嗜好：
 无可靠依据时填「未知」或「未询问」，禁止编造隐私史。
 
-【服装——优先级（禁止默认全裸）】
-1. 先读世界书中该角色的着装/人设衣物。
-2. 再看正文/聊天是否有明确更衣、脱衣、换装；有则按正文变更。
-3. 正文无变更 → 保持世界书着装。
-4. 世界书也未写该分区 → 该槽输出 "- 待确认"（不是未穿着）。
-5. 仅当世界书或正文明确该位无衣/全裸/未穿着时，才输出 "- 无" 或 "- 未穿着"。
-每个分区三态：
+【服装——严格优先级】
+1. 世界书：角色条目着装、以及世界设定中的默认着装习惯（若写明「日常不着衣/全裸社会」，则各衣物槽为未穿着，输出"- 无"）。
+2. 正文/聊天：若明确穿上、脱下、更换某物，以正文为准（例如「脱掉鞋子」→【鞋子】必须"- 无"，禁止改成待确认）。
+3. 正文未提某槽 → 保持步骤1的世界书结果，不要改成待确认。
+4. 仅当世界书与正文都完全未提供该槽信息时，才输出"- 待确认"。
+每个分区必须输出一行，三态只能其一：
 - 有衣："- 短名称 | 描述"
-- 明确无衣："- 无"
-- 信息不足："- 待确认"
-禁止输出「未提及」。禁止在无依据时把全身写成无。发型写在【发型】，不可脱。
+- 明确无衣/已脱掉/全裸设定："- 无"
+- 两边都无信息："- 待确认"
+禁止「未提及」。禁止无依据默认全身无衣（除非世界书写明全裸日常）。发型只写【发型】不可脱。
+【鞋子】等分区：正文写脱下后必须是"- 无"。
 
 输出格式（每字段独占一行）：
 【链接角色】值
@@ -781,48 +772,52 @@ export class EroLinksView {
     }
 
     _parseOutfit(raw) {
-        if (!raw) return {};
-        const result = { head: [], neck: [], upper: [], hands: [], lower: [], legs: [], acc: [] };
-        const lines = raw.split('\n');
+        if (!raw) return EStore.emptyOutfit();
+        const result = EStore.emptyOutfit();
+        const lines = String(raw).split('\n');
         let cz = '';
         const getZone = (z) => {
-            if (z.includes('帽') || z.includes('头') || z.includes('发')) return 'head';
-            if (z.includes('脖') || z.includes('领')) return 'neck';
-            if (z.includes('上身') || z.includes('胸') || z.includes('衬') || z.includes('套') || z.includes('衣') || z.includes('罩')) return 'upper';
-            if (z.includes('手')) return 'hands';
-            if (z.includes('下身') || z.includes('裙') || z.includes('裤')) return 'lower';
-            if (z.includes('腿') || z.includes('脚') || z.includes('袜') || z.includes('鞋')) return 'legs';
-            if (z.includes('饰') || z.includes('装')) return 'acc';
+            const s = String(z || '');
+            if (s.includes('帽') || s.includes('发型') || s.includes('发饰') || (s.includes('头') && !s.includes('颈'))) return 'head';
+            if (s.includes('发') && !s.includes('饰')) return 'head';
+            if (s.includes('脖') || s.includes('领') || s.includes('颈')) return 'neck';
+            if (s.includes('胸罩') || s.includes('内衣') || s.includes('外套') || s.includes('内衬') || s.includes('上身') || s.includes('衬衫') || s.includes('T恤')) return 'upper';
+            if (s.includes('手套') || (s.includes('手') && !s.includes('机'))) return 'hands';
+            if (s.includes('裙') || s.includes('裤') || s.includes('内裤') || s.includes('下身')) return 'lower';
+            if (s.includes('袜') || s.includes('鞋') || s.includes('靴') || s.includes('腿') || s.includes('脚')) return 'legs';
+            if (s.includes('饰') || s.includes('环') || s.includes('包')) return 'acc';
             return '';
         };
         const toItem = (n) => {
-            const pipe = n.indexOf('|');
-            const name = pipe >= 0 ? n.substring(0, pipe).trim() : n;
-            const desc = pipe >= 0 ? n.substring(pipe + 1).trim() : n;
-            return {
-                name: name.replace(/（.*?）$/g, '').trim(),
-                desc: desc.replace(/（.*?）$/g, '').trim()
-            };
+            let t = String(n || '').replace(/^-\s*/, '').trim();
+            // 正文脱下后常见写法
+            if (/^(已)?(脱掉|脱下|除去)/.test(t) || t === '无' || t === '未穿着') {
+                return { name: '未穿着', desc: '', bare: true };
+            }
+            const pipe = t.indexOf('|');
+            const name = (pipe >= 0 ? t.substring(0, pipe) : t).trim();
+            const desc = (pipe >= 0 ? t.substring(pipe + 1) : t).trim();
+            return { name: name.replace(/（.*?）$/g, '').trim(), desc: desc.replace(/（.*?）$/g, '').trim() };
         };
         const pushItem = (zone, text) => {
-            if (!zone || !text) return;
-            const t = text.replace(/^-\s*/, '').trim();
-            if (!t || t === '无' || t === '无。') return;
+            if (!zone || text == null) return;
+            const t = String(text).replace(/^-\s*/, '').trim();
+            if (!t) return;
             result[zone].push(toItem(t));
         };
         for (const line of lines) {
             const t = line.trim();
-            if (!t) continue;
-            const m = t.match(/^【(.+?)】-?\s*(.*)/);
+            if (!t || t.startsWith('【服装')) continue;
+            const m = t.match(/^【(.+?)】\s*-?\s*(.*)$/);
             if (m) {
                 cz = getZone(m[1]) || cz;
-                const same = m[2]?.trim();
+                const same = (m[2] || '').trim();
                 if (same) pushItem(cz || getZone(m[1]), same);
                 continue;
             }
             if (t.startsWith('-')) pushItem(cz, t);
         }
-        return result;
+        return EStore.normalizeOutfit(result);
     }
 
     _hypnoModes() {
