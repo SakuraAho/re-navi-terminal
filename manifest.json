@@ -9,5 +9,7 @@
     "optional": [],
     "js": "index.js",
     "css": "style.css",
-    "auto_update": false
+    "homePage": "https://github.com/SakuraAho/re-navi-terminal",
+    "source": "https://github.com/SakuraAho/re-navi-terminal.git",
+    "auto_update": true
 }
