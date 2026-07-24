@@ -250,7 +250,7 @@ export class NaviView {
             <div class="navi-bar-btn" onclick="window.NaviTerm.naviView.goSettings()">⚙️</div>
         </div><div class="navi-scroll">
             <div class="navi-section">
-                <div class="navi-section-title">${modeName}</div>
+                <div class="navi-section-title">${this.mode === 'observation' ? '🔍 观测模式' : '✋ 把玩模式'}</div>
                 ${this._renderOptToggle('action', '🏃 动作指示', jinguan ? '静观档已禁用动作指示（保持自然）' : '指定姿态/动作；留空则 AI 设计', jinguan)}
                 ${this._renderOptToggle('items', '🧴 辅助物品', '指定道具；留空则 AI 设计')}
                 ${this._renderOptToggle('assist', '👥 协助人员', '如「目标自己」或另一角色；留空则 AI 设计')}
@@ -475,11 +475,7 @@ export class NaviView {
             const targetName = optGet('target') ? optText('target') : '';
             const assistName = optGet('assist') ? optText('assist') : '';
             const isSelf = assistName && targetName && assistName === targetName;
-            if (feature === 'observation') {
-                items.push(`镜头：全程视觉镜头（禁止触觉镜头文风）。当前档【${difficulty}】。`);
-            } else {
-                items.push('镜头：全程触觉镜头（体感记录为主）。');
-            }
+                items.push(`当前档【${difficulty}】。`);
             if (optGet('target')) {
                 items.push(targetName
                     ? `对象指定：全部${n}个委托目标固定为【${targetName}】${isSelf ? '（目标同时担任协助者）' : ''}。`
@@ -541,8 +537,8 @@ export class NaviView {
             .replace(/\{\{CONSTRAINTS\}\}/g, buildConstraints());
 
         const userMsg = feature === 'observation'
-            ? `请严格按【${difficulty}】档、视觉镜头，生成恰好${n}个观测委托。每条必须有姓名任务目标；步骤点名。主焦点依次：${focuses.slice(0, n).join('、')}。只要步骤与注意，禁止「要看/记录点」及任何观察结论描写。`
-            : `请严格按【${difficulty}】档、触觉镜头，生成恰好${n}个把玩委托。每条必须有姓名任务目标；步骤点名。主焦点依次：${focuses.slice(0, n).join('、')}。只要步骤与注意，禁止「要感受/体感记录点」及成品体感描写。`;
+            ? `请严格按【${difficulty}】档生成恰好${n}个观测委托。每条必须有姓名任务目标；步骤点名。主焦点依次：${focuses.slice(0, n).join('、')}。只要步骤与注意；禁止要看/记录点/镜头字段；禁止观察结论描写。`
+            : `请严格按【${difficulty}】档生成恰好${n}个把玩委托。每条必须有姓名任务目标；步骤点名。主焦点依次：${focuses.slice(0, n).join('、')}。只要步骤与注意；禁止要感受/记录点/镜头字段；禁止成品体感描写。`;
 
         const result = await Bridge.callPhoneAI(
             [
@@ -586,7 +582,9 @@ export class NaviView {
             : '';
         const optTags = Store.formatOptTags(c.opts || {});
         const indicatorLabel = c.mode === 'play' ? '交互要点' : '观测指标';
-        const lens = c.mode === 'play' ? '触觉镜头' : '视觉镜头';
+        const lensHint = c.mode === 'play'
+            ? '导出时注入【触觉镜头】供正文读取'
+            : '导出时注入【视觉镜头】供正文读取';
 
         return `<div class="navi-app"><div class="navi-bar">
             <div class="navi-bar-btn" onclick="window.NaviTerm.naviView.goBack()" style="margin-right:auto">← 返回</div>
@@ -598,7 +596,7 @@ export class NaviView {
                 ${c.playTag ? `<span class="navi-site-tag large">🏷 ${this._esc(c.playTag)}</span>` : ''}
                 <span class="navi-st-label" style="color:${Store.statusColor(c.status)}">${Store.statusLabel(c.status)}</span>
             </div>
-            <div class="navi-hint" style="margin:0 0 10px">${lens}${c.mode === 'observation' ? ' · 步骤须点名角色' : ''}</div>
+            <div class="navi-hint" style="margin:0 0 10px">${lensHint}</div>
             ${optTags.length ? `<div class="navi-opt-tags" style="margin-bottom:10px">${optTags.map((t) => `<span class="navi-opt-tag">${this._esc(t)}</span>`).join('')}</div>` : ''}
             <div class="navi-detail-field navi-detail-target"><div class="navi-detail-label">🎯 观测对象 / 任务目标</div><div class="navi-detail-value">${c.target ? this._esc(c.target) : '<span style="color:#ff4d4f">（缺失：请重 roll 或检查提示词）</span>'}</div></div>
             ${focus ? `<div class="navi-detail-field"><div class="navi-detail-label">📍 主焦点</div><div class="navi-detail-value">${this._esc(focus)}</div></div>` : ''}
@@ -651,6 +649,13 @@ export class NaviView {
         </div></div></div>`;
     }
 
+    _lensBlock(mode) {
+        if (mode === 'play') {
+            return `【镜头指令·触觉镜头】本段正文切入触觉镜头：以触摸与亲身体验为主描写触感、力度、紧度、温度、湿度、包裹、摩擦等；可见形态可辅写，但主笔在「摸到/做到什么感觉」。`;
+        }
+        return `【镜头指令·视觉镜头】本段正文切入视觉镜头：以「看见」为主描写形态、动态、开合、色泽、湿润反光、动作幅度等；即使步骤含触碰或性行为，也不切入触觉镜头（不写手感/包裹/内壁紧度体感等）。`;
+    }
+
     _buildExportText(c, type) {
         const modeName = c.mode === 'play' ? '把玩' : '观测';
         const site = (c.siteFocus || c.site)
@@ -658,25 +663,41 @@ export class NaviView {
             : (c.playTag ? ` · ${c.playTag}` : '');
         const who = c.target || '（未指定对象）';
         const focus = c.siteFocus || c.site || '';
+        const lens = this._lensBlock(c.mode);
+        // 去掉指标里误生成的「镜头：」行，避免与导出指令重复冲突
+        const indicator = String(c.indicator || '')
+            .split('\n')
+            .filter((line) => !/^\s*镜头\s*[：:]/.test(line))
+            .join('\n')
+            .trim();
+
         if (type === 'system') {
-            return `【N.A.V.I. ${modeName}委托 · ${c.difficulty}${site}】
+            return `${lens}
+
+【N.A.V.I. ${modeName}委托 · ${c.difficulty}${site}】
 对象：${who}
-${focus ? `主焦点：${focus}\n` : ''}${c.indicator || ''}
+${focus ? `主焦点：${focus}\n` : ''}${indicator}
 时限：${c.deadline || '无'}　报酬：${c.reward || ''}`;
         }
         if (type === 'accept') {
-            return `（接取委托 · ${c.difficulty}${site}）
+            return `${lens}
+
+（接取委托 · ${c.difficulty}${site}）
 对象：${who}
-${c.indicator || ''}`;
+${indicator}`;
         }
         if (type === 'focus') {
-            return `【本轮焦点】${who}${focus ? ` · ${focus}` : ''}
-${c.indicator || ''}`;
+            return `${lens}
+
+【本轮焦点】${who}${focus ? ` · ${focus}` : ''}
+${indicator}`;
         }
-        return `【观测委托 - ${c.difficulty}${site}】
+        return `${lens}
+
+【观测委托 - ${c.difficulty}${site}】
 🎯 对象：${who}
 ${focus ? `📍 主焦点：${focus}\n` : ''}📋 ${c.mode === 'play' ? '交互要点' : '观测指标'}：
-${c.indicator || ''}
+${indicator}
 ⏰ ${c.deadline || '无'}　💰 ${c.reward || ''}`;
     }
 
