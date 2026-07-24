@@ -215,7 +215,7 @@ export class NaviView {
                 ${c.incomplete ? '<span class="navi-site-tag warn">不完整</span>' : ''}
                 <button class="navi-copy-btn" onclick="event.stopPropagation();window.NaviTerm.naviView.openExport('${c.id}')">导出</button>
             </div>
-            <div class="navi-card-target">🎯 ${this._esc(c.target)}</div>
+            <div class="navi-card-target">🎯 ${this._esc(c.target || '（无对象名）')}</div>
             <div class="navi-card-indicator">${this._esc((c.indicator || '').substring(0, 90))}${(c.indicator || '').length > 90 ? '…' : ''}</div>
             ${optTags.length ? `<div class="navi-opt-tags">${optTags.map((t) => `<span class="navi-opt-tag">${this._esc(t)}</span>`).join('')}</div>` : ''}
             <div class="navi-card-meta"><span>💰 ${this._esc(c.reward)}</span><span class="navi-st-label" style="color:${stClr}">${Store.statusLabel(c.status)}</span></div>
@@ -541,8 +541,8 @@ export class NaviView {
             .replace(/\{\{CONSTRAINTS\}\}/g, buildConstraints());
 
         const userMsg = feature === 'observation'
-            ? `请严格按【${difficulty}】档、视觉镜头，生成恰好${n}个观测委托。主焦点依次为：${focuses.slice(0, n).join('、')}。`
-            : `请严格按【${difficulty}】档、触觉镜头，生成恰好${n}个把玩委托。主焦点依次为：${focuses.slice(0, n).join('、')}。`;
+            ? `请严格按【${difficulty}】档、视觉镜头，生成恰好${n}个观测委托。每条必须有「姓名-种族-年龄|胸穴|正在做什么」任务目标；步骤必须点名该姓名，禁止只写「目标/观者」。主焦点依次：${focuses.slice(0, n).join('、')}。要看仅2～4条空槽，禁止成品外观描写。`
+            : `请严格按【${difficulty}】档、触觉镜头，生成恰好${n}个把玩委托。每条必须有姓名任务目标；步骤点名。主焦点依次：${focuses.slice(0, n).join('、')}。要感受仅2～4条空槽。`;
 
         const result = await Bridge.callPhoneAI(
             [
@@ -598,10 +598,10 @@ export class NaviView {
                 ${c.playTag ? `<span class="navi-site-tag large">🏷 ${this._esc(c.playTag)}</span>` : ''}
                 <span class="navi-st-label" style="color:${Store.statusColor(c.status)}">${Store.statusLabel(c.status)}</span>
             </div>
-            <div class="navi-hint" style="margin:0 0 10px">镜头：${lens}</div>
+            <div class="navi-hint" style="margin:0 0 10px">${lens}${c.mode === 'observation' ? ' · 步骤须点名角色' : ''}</div>
             ${optTags.length ? `<div class="navi-opt-tags" style="margin-bottom:10px">${optTags.map((t) => `<span class="navi-opt-tag">${this._esc(t)}</span>`).join('')}</div>` : ''}
+            <div class="navi-detail-field navi-detail-target"><div class="navi-detail-label">🎯 观测对象 / 任务目标</div><div class="navi-detail-value">${c.target ? this._esc(c.target) : '<span style="color:#ff4d4f">（缺失：请重 roll 或检查提示词）</span>'}</div></div>
             ${focus ? `<div class="navi-detail-field"><div class="navi-detail-label">📍 主焦点</div><div class="navi-detail-value">${this._esc(focus)}</div></div>` : ''}
-            <div class="navi-detail-field"><div class="navi-detail-label">🎯 任务目标</div><div class="navi-detail-value">${this._esc(c.target)}</div></div>
             <div class="navi-detail-field"><div class="navi-detail-label">📋 ${indicatorLabel}</div><div class="navi-detail-value">${this._esc(c.indicator)}</div></div>
             <div class="navi-detail-field"><div class="navi-detail-label">⏰ 委托时限</div><div class="navi-detail-value">${this._esc(c.deadline || '无')}</div></div>
             <div class="navi-detail-field"><div class="navi-detail-label">💰 预计报酬</div><div class="navi-detail-value reward">${this._esc(c.reward)}</div></div>
@@ -655,30 +655,28 @@ export class NaviView {
         const modeName = c.mode === 'play' ? '把玩' : '观测';
         const site = c.site ? ` · ${c.site}` : (c.playTag ? ` · ${c.playTag}` : '');
         if (type === 'system') {
-            return `【N.A.V.I. 观测委托 · ${modeName}${site}】
-系统向体己师下发一条${c.difficulty}委托。
-目标：${c.target || ''}
-要求：${c.indicator || ''}
-时限：${c.deadline || '无'}　报酬：${c.reward || ''}
-（可自由接取或无视）`;
+            const who = c.target || '（未指定对象）';
+        const focus = c.siteFocus || c.site || '';
+        if (type === 'system') {
+            return `【N.A.V.I. ${modeName}委托 · ${c.difficulty}${site}】
+对象：${who}
+${focus ? `主焦点：${focus}\n` : ''}${c.indicator || ''}
+时限：${c.deadline || '无'}　报酬：${c.reward || ''}`;
         }
         if (type === 'accept') {
-            return `（接取 N.A.V.I. ${modeName}委托 · ${c.difficulty}${site}）
-目标：${c.target || ''}
-我按照委托要求行动：${c.indicator || ''}`;
-        }
-        if (type === 'focus') {
-            return `【本轮焦点 · ${modeName}委托】
-${c.target || ''}
+            return `（接取委托 · ${c.difficulty}${site}）
+对象：${who}
 ${c.indicator || ''}`;
         }
-        // full
+        if (type === 'focus') {
+            return `【本轮焦点】${who}${focus ? ` · ${focus}` : ''}
+${c.indicator || ''}`;
+        }
         return `【观测委托 - ${c.difficulty}${site}】
-🎯 任务目标：${c.target || ''}
-📋 ${c.mode === 'play' ? '交互要点' : '观测指标'}：${c.indicator || ''}
-📊 预估难度：${c.difficulty || ''}
-⏰ 委托时限：${c.deadline || '无'}
-💰 预计报酬：${c.reward || ''}`;
+🎯 对象：${who}
+${focus ? `📍 主焦点：${focus}\n` : ''}📋 ${c.mode === 'play' ? '交互要点' : '观测指标'}：
+${c.indicator || ''}
+⏰ ${c.deadline || '无'}　💰 ${c.reward || ''}`;
     }
 
     exportToChat(id, type) {
