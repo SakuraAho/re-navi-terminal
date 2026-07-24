@@ -271,10 +271,12 @@ export function formatOutfitSnapshot(outfit) {
     }).join('\n');
 }
 
-/** 非空才写入；避免 AI 漏字段把旧档案刷成空白 */
+/** 非空才写入；「保持」/空 → 沿用旧值，避免无变更重写 */
 function pickFilled(baseVal, patchVal) {
     const v = patchVal == null ? '' : String(patchVal).trim();
-    if (!v || v === '—') return baseVal;
+    if (!v || v === '—' || v === '保持' || v === '不变' || v === '无变更' || /^保持原/.test(v)) {
+        return baseVal;
+    }
     return v;
 }
 
@@ -295,6 +297,8 @@ export function mergeProfiles(base, patch, mode = 'full') {
         DYNAMIC_FIELDS.forEach((f) => {
             out[f] = pickFilled(b[f], p[f]);
         });
+        // 状态刷新不碰服装
+        out.outfit = b.outfit;
         return normalizeProfile(out);
     }
     if (mode === 'outfit') {
@@ -305,6 +309,28 @@ export function mergeProfiles(base, patch, mode = 'full') {
         });
     }
     return b;
+}
+
+const FIELD_LABELS = {
+    charName: '链接角色', race: '种族', age: '年龄', role: '身份', affiliation: '所属',
+    activity: '当前活动', location: '所在位置', favorability: '好感度',
+    heartRate: '心率', temp: '体温', mood: '当前状态',
+    breast: '胸部', vulva: '小穴', sexExp: '性经验', lastSex: '最近性行为',
+    mastFreq: '自慰频率', lastMast: '最近自慰', sensitive: '敏感部位',
+    wetness: '湿润状态', arousal: '快感阶段', cycle: '生理周期',
+    desire: '当前欲望', fantasy: '幻想内容', kink: '秘密嗜好',
+    bodyChange: '身体变化', thought: '心理所想'
+};
+
+/** 当前档案快照，供状态/全量增量刷新 */
+export function formatProfileSnapshot(profile, fields) {
+    const p = normalizeProfile(profile || {});
+    const list = Array.isArray(fields) ? fields : [...STATIC_FIELDS, ...DYNAMIC_FIELDS];
+    return list.map((f) => {
+        const lab = FIELD_LABELS[f] || f;
+        const v = String(p[f] || '').trim() || '（空）';
+        return `【${lab}】${v}`;
+    }).join('\n');
 }
 
 export function buildChatContext(chat, depth = 5) {

@@ -269,14 +269,17 @@ export class EroLinksView {
             const systemPrompt = this._resolveLinkPrompt(worldbookText, chatText, {
                 mode: this._linkMode,
                 targetName: inputName,
-                currentOutfit: this._linkedData?.outfit
+                currentOutfit: this._linkedData?.outfit,
+                currentProfile: this._linkedData
             });
 
             const userHint = this._linkMode === 'status'
-                ? '请仅更新动态状态字段并按格式输出。'
+                ? '状态增量：未变化字段输出「保持」，仅正文有变化的动态字段写新值。禁止重写未变更描述。'
                 : this._linkMode === 'outfit'
-                    ? '请仅根据正文中的着装变更做增量更新：未变更分区输出「- 保持」，变更分区才写新衣物或「- 无」。禁止重写未变更服装。'
-                    : '请建立全量链接并按格式输出。';
+                    ? '服装增量：未变更分区输出「- 保持」，变更分区才写新衣物或「- 无」。禁止重写未变更服装。'
+                    : (this._linkedData
+                        ? '全量增量：已有档案时未变化字段输出「保持」，仅变化处更新；服装未变写「- 保持」。'
+                        : '请建立全量链接并按格式输出（首次无档案，完整填写）。');
 
             const result = await Bridge.callPhoneAI(
                 [
@@ -344,10 +347,19 @@ export class EroLinksView {
         } else {
             extra.push('【认人】从聊天记录中识别主要角色；多人时优先最近发言或被点名者。');
         }
+        const cur = this._linkedData || opts.currentProfile || null;
         if (mode === 'status') {
-            extra.push('【本次范围】只更新可探测动态：活动、位置、好感、心率(纯数字)、体温(纯数字)、状态、湿润、快感、身体变化、心理所想(可察神情)。禁止对这些字段输出「未知」。秘密类可略。');
+            const snap = EStore.formatProfileSnapshot(cur, EStore.DYNAMIC_FIELDS);
+            extra.push(`【本次范围·状态增量更新】
+【链接角色】必须正确。
+下面是【当前已记录动态状态】。正文/聊天没有明确变化的字段必须原样输出「保持」，禁止换同义改写、禁止重新发挥。
+仅正文有明确变化的字段才写新值。心率体温只写纯数字。不要输出服装块（或服装全写保持）。
+
+【当前已记录动态状态】
+${snap || '（尚无）'}
+`);
         } else if (mode === 'outfit') {
-            const snap = EStore.formatOutfitSnapshot(this._linkedData?.outfit || opts.currentOutfit || {});
+            const snap = EStore.formatOutfitSnapshot(cur?.outfit || opts.currentOutfit || {});
             extra.push(`【本次范围·服装增量更新】
 【链接角色】必须正确。
 下面是角色【当前已记录着装】，正文没有明确变更的分区必须输出 "- 保持"，禁止重写、禁止换同义描述、禁止重新发挥。
@@ -356,6 +368,19 @@ export class EroLinksView {
 
 【当前已记录着装】
 ${snap || '（尚无记录）'}
+`);
+        } else if (mode === 'full' && cur) {
+            const snap = EStore.formatProfileSnapshot(cur, [...EStore.STATIC_FIELDS, ...EStore.DYNAMIC_FIELDS]);
+            const oSnap = EStore.formatOutfitSnapshot(cur.outfit || {});
+            extra.push(`【全量刷新·仍须增量】
+已有档案时：正文未变化的字段输出「保持」；仅变化处写新值。禁止无故重写同义描述。
+服装未变更槽输出 "- 保持"。
+
+【当前档案摘要】
+${snap}
+
+【当前着装】
+${oSnap}
 `);
         }
         return extra.length ? `${base}\n\n${extra.join('\n')}` : base;
