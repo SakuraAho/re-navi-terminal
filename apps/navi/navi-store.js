@@ -1,10 +1,25 @@
-/* 观测委托本地订单存储 */
+/* 观测委托本地订单存储 + 部位焦点池 */
 import Bridge from '../../bridge.js';
 
 export const BOARD_KEY = 'navi_term_board_v1';
 export const LAST_CFG_KEY = 'navi_term_last_cfg';
 export const GEN_COUNT_KEY = 'navi_term_gen_count';
+export const SITES_KEY = 'navi_opt_sites';
 export const MAX_BOARD = 40;
+export const MAX_SITES = 5;
+
+/** 部位焦点池（观测/把玩共用） */
+export const SITE_POOL = Object.freeze([
+    '胸部',
+    '乳头',
+    '小穴大阴唇/小阴唇',
+    '阴蒂',
+    '阴道外侧',
+    '阴道里侧',
+    '尿道口',
+    '足部',
+    '臀部'
+]);
 
 const STATUSES = ['unused', 'active', 'used', 'starred'];
 
@@ -16,6 +31,15 @@ function safeParse(raw, fallback) {
 
 export function uid() {
     return 'n' + Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
+}
+
+function shuffle(arr) {
+    const a = [...arr];
+    for (let i = a.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [a[i], a[j]] = [a[j], a[i]];
+    }
+    return a;
 }
 
 export function loadBoard() {
@@ -39,7 +63,8 @@ export function normalizeItem(c) {
         target: String(c.target || ''),
         indicator: String(c.indicator || ''),
         playTag: String(c.playTag || ''),
-        site: String(c.site || ''),
+        site: String(c.site || c.siteFocus || ''),
+        siteFocus: String(c.siteFocus || c.site || ''),
         deadline: String(c.deadline || '无'),
         reward: String(c.reward || '未知'),
         status,
@@ -51,7 +76,6 @@ export function normalizeItem(c) {
 
 export function appendItems(board, newItems) {
     const next = [...(newItems || []).map(normalizeItem), ...(board || [])];
-    // 进行中最多保留 1 条：新接取时由 setStatus 处理
     return saveBoard(next.slice(0, MAX_BOARD));
 }
 
@@ -96,13 +120,62 @@ export function setGenCount(n) {
     return v;
 }
 
-export function snapshotOpts(getBool, getText) {
+/** @returns {string[]} */
+export function loadSelectedSites() {
+    const raw = safeParse(Bridge.termGet(SITES_KEY, '[]'), []);
+    if (!Array.isArray(raw)) return [];
+    const allowed = new Set(SITE_POOL);
+    const out = [];
+    for (const s of raw) {
+        const t = String(s || '').trim();
+        if (allowed.has(t) && !out.includes(t)) out.push(t);
+        if (out.length >= MAX_SITES) break;
+    }
+    return out;
+}
+
+export function saveSelectedSites(sites) {
+    const allowed = new Set(SITE_POOL);
+    const out = [];
+    for (const s of sites || []) {
+        const t = String(s || '').trim();
+        if (allowed.has(t) && !out.includes(t)) out.push(t);
+        if (out.length >= MAX_SITES) break;
+    }
+    Bridge.termSet(SITES_KEY, JSON.stringify(out), true);
+    return out;
+}
+
+/**
+ * 条数独立：按 count 为每条分配 siteFocus。
+ * 有多选：在所选池内轮转均分；无多选：全池随机，优先不重复。
+ */
+export function assignSiteFocuses(count, selectedSites = null) {
+    const n = Math.max(1, Math.min(20, Number(count) || 1));
+    const selected = Array.isArray(selectedSites) ? selectedSites.filter((s) => SITE_POOL.includes(s)) : loadSelectedSites();
+
+    if (selected.length > 0) {
+        const pool = selected.slice(0, MAX_SITES);
+        const focuses = [];
+        for (let i = 0; i < n; i++) focuses.push(pool[i % pool.length]);
+        return focuses;
+    }
+
+    const shuffled = shuffle([...SITE_POOL]);
+    if (n <= shuffled.length) return shuffled.slice(0, n);
+    const focuses = [];
+    for (let i = 0; i < n; i++) focuses.push(shuffled[i % shuffled.length]);
+    return focuses;
+}
+
+export function snapshotOpts(getBool, getText, extra = {}) {
     const keys = ['action', 'items', 'assist', 'target'];
     const opts = {};
     keys.forEach((k) => {
         opts[k] = !!getBool(k);
         opts[k + '_text'] = opts[k] ? String(getText(k + '_text') || '').trim() : '';
     });
+    opts.sites = Array.isArray(extra.sites) ? extra.sites : loadSelectedSites();
     return opts;
 }
 
@@ -112,6 +185,9 @@ export function formatOptTags(opts = {}) {
     if (opts.action) tags.push('🏃' + (opts.action_text || '随机动作'));
     if (opts.items) tags.push('🧴' + (opts.items_text || '随机道具'));
     if (opts.assist) tags.push('👥' + (opts.assist_text || '随机协助'));
+    if (Array.isArray(opts.sites) && opts.sites.length) {
+        tags.push('📍' + opts.sites.slice(0, 3).join('/') + (opts.sites.length > 3 ? '…' : ''));
+    }
     return tags;
 }
 
