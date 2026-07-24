@@ -1,15 +1,16 @@
-/* N.A.V.I. EroLinks v3.1 — 经 bridge 安全桥接 */
+/* N.A.V.I. EroLinks v4.0 — 档案 / 认人 / 分层刷新 */
 
 (function () {
     if (document.getElementById('erolinks-styles')) return;
     const l = document.createElement('link');
     l.id = 'erolinks-styles';
     l.rel = 'stylesheet';
-    l.href = new URL('./erolinks.css?v=3.1.0', import.meta.url).href;
+    l.href = new URL('./erolinks.css?v=4.0.0', import.meta.url).href;
     document.head.appendChild(l);
 })();
 
 import Bridge from '../../bridge.js';
+import * as EStore from './erolinks-store.js';
 
 const TABS = [
     { key: 'info', icon: '📋' },
@@ -24,15 +25,16 @@ export class EroLinksView {
         this.currentView = 'main';
         this.activeTab = 'info';
         this._loading = false;
+        this._linkMode = 'full'; // full | status | outfit
         this._linkedData = null;
         this._wbRendered = false;
         this._outfitChanges = {};
         this._lastRaw = '';
+        this._prefs = EStore.loadPrefs();
         if (window.NaviTerm) window.NaviTerm.erolinksView = this;
-        // 确保默认 link 提示词入仓
         Bridge.ensurePromptDefaults('erolinks', {
-            link: { enabled: true, name: 'EroLinks LINK', content: this._getDefaultLinkPrompt('[世界书内容]', '[最后一条聊天记录]'), order: 10 }
-        }, 2);
+            link: { enabled: true, name: 'EroLinks LINK', content: this._getDefaultLinkPrompt('[世界书内容]', '[聊天记录]'), order: 10 }
+        }, 3);
     }
 
     _esc(v) { return Bridge.escapeHtml(v); }
@@ -44,6 +46,8 @@ export class EroLinksView {
         else h = this._renderMain();
         this.app.phoneShell.setContent(h, 'erolinks-' + this.currentView);
         if (this.currentView === 'settings') this._bindSettings();
+        if (this.currentView === 'main') this._bindMain();
+        if (this.currentView === 'linked') this._bindLinked();
     }
 
     goSettings() { this.currentView = 'settings'; this._wbRendered = false; this.render(); }
@@ -59,11 +63,163 @@ export class EroLinksView {
     }
 
     _renderMain() {
-        return `<div class="erolinks-app"><div class="erolinks-bar"><div class="erolinks-bar-btn" onclick="window.NaviTerm.erolinksView.goSettings()">⚙️</div></div><div class="erolinks-main"><div class="erolinks-link-btn ${this._loading ? 'loading' : ''}" onclick="window.NaviTerm.erolinksView._linkChar()"><div class="erolinks-link-ring"></div><div class="erolinks-link-text">${this._loading ? '⏳' : 'LINK'}</div>${this._loading ? '<div class="erolinks-link-sub">链接中...</div>' : ''}</div><div class="erolinks-hint">链接当前对话中的角色</div></div></div>`;
+        const prefs = this._prefs || EStore.loadPrefs();
+        const depth = prefs.chatDepth || 5;
+        const nameVal = prefs.lastTargetName || '';
+        const archives = EStore.loadArchive();
+                const archHtml = archives.length
+            ? archives.map((p) => {
+                const t = p.updatedAt ? new Date(p.updatedAt).toLocaleString() : '';
+                return `<div class="el-arch-row" data-name="${this._esc(p.charName)}">
+                    <button type="button" class="el-arch-item" data-act="open" data-name="${this._esc(p.charName)}">
+                        <span class="el-arch-name">${this._esc(p.charName)}</span>
+                        <span class="el-arch-meta">${this._esc(p.mood || p.location || '—')} · ${this._esc(t)}</span>
+                    </button>
+                    <button type="button" class="el-arch-del" data-act="del" data-name="${this._esc(p.charName)}" title="删除">×</button>
+                </div>`;
+            }).join('')
+            : '<div class="el-arch-empty">暂无档案。LINK 成功后会自动保存。</div>';
+
+        return `<div class="erolinks-app">
+            <div class="erolinks-bar">
+                <div class="erolinks-bar-btn" onclick="window.NaviTerm.erolinksView.goSettings()">⚙️</div>
+            </div>
+            <div class="erolinks-main el-main-scroll">
+                <div class="erolinks-link-btn ${this._loading ? 'loading' : ''}" id="el-link-btn">
+                    <div class="erolinks-link-ring"></div>
+                    <div class="erolinks-link-text">${this._loading ? '⏳' : 'LINK'}</div>
+                    ${this._loading ? '<div class="erolinks-link-sub">链接中...</div>' : ''}
+                </div>
+                <div class="erolinks-hint">链接对话角色 · 可指定姓名 · 结果写入档案</div>
+                <div class="el-link-form">
+                    <label class="el-field">
+                        <span class="el-field-label">目标姓名（可空=从聊天识别）</span>
+                        <input type="text" id="el-target-name" class="el-input" placeholder="例如：夏织" value="${this._esc(nameVal)}">
+                    </label>
+                    <div class="el-field">
+                        <span class="el-field-label">聊天上下文</span>
+                        <div class="el-depth-row" id="el-depth-row">
+                            ${[1, 5, 10].map((n) =>
+                                `<button type="button" class="el-depth-btn${depth === n ? ' on' : ''}" data-depth="${n}">最近 ${n} 条</button>`
+                            ).join('')}
+                        </div>
+                    </div>
+                </div>
+                <div class="el-arch-block">
+                    <div class="el-arch-title">📁 角色档案（${archives.length}）</div>
+                    <div class="el-arch-list" id="el-arch-list">${archHtml}</div>
+                    <div class="el-arch-hint">点名称打开 · 右侧 × 删除</div>
+                </div>
+            </div>
+        </div>`;
     }
 
-    async _linkChar() {
+    openArchive(name) {
+        const p = EStore.getProfile(name);
+        if (!p) {
+            this.app.phoneShell?.showNotification?.('未找到档案', name || '', '❌');
+            return;
+        }
+        this._linkedData = EStore.normalizeProfile(p);
+        this._outfitChanges = {};
+        this.activeTab = 'info';
+        this.currentView = 'linked';
+        this._prefs = EStore.savePrefs({ lastTargetName: p.charName || '' });
+        this.render();
+    }
+
+    deleteArchive(name) {
+        if (!name) return;
+        if (!confirm(`删除档案「${name}」？`)) return;
+        EStore.removeProfile(name);
+        if (this._linkedData && EStore.sanitizeName(this._linkedData.charName) === EStore.sanitizeName(name)) {
+            this._linkedData = null;
+            this.currentView = 'main';
+        }
+        this.app.phoneShell?.showNotification?.('已删除', name, '✅');
+        this.render();
+    }
+
+    _bindMain() {
+        const root = this.app.phoneShell.screen;
+        if (!root) return;
+        root.querySelector('#el-link-btn')?.addEventListener('click', () => {
+            if (this._loading) return;
+            const name = root.querySelector('#el-target-name')?.value?.trim() || '';
+            this._prefs = EStore.savePrefs({ lastTargetName: name });
+            this._linkChar('full');
+        });
+        root.querySelectorAll('.el-depth-btn').forEach((btn) => {
+            btn.addEventListener('click', () => {
+                const d = parseInt(btn.dataset.depth, 10);
+                this._prefs = EStore.savePrefs({ chatDepth: d });
+                this.render();
+            });
+        });
+        root.querySelector('#el-target-name')?.addEventListener('change', (e) => {
+            this._prefs = EStore.savePrefs({ lastTargetName: e.target.value || '' });
+        });
+        root.querySelectorAll('.el-arch-item').forEach((btn) => {
+            btn.addEventListener('click', () => this.openArchive(btn.dataset.name || ''));
+        });
+        root.querySelectorAll('.el-arch-del').forEach((btn) => {
+            btn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                this.deleteArchive(btn.dataset.name || '');
+            });
+        });
+    }
+
+    _extractField(text, label) {
+        const idx = text.indexOf('【' + label + '】');
+        if (idx === -1) return '';
+        const start = idx + label.length + 2;
+        const rest = text.substring(start);
+        const nb = rest.indexOf('\n【');
+        const val = nb > 0 ? rest.substring(0, nb) : nb === 0 ? rest.substring(1) : rest;
+        return val.trim();
+    }
+
+    _parseLinkResult(text) {
+        const ex = (label) => this._extractField(text, label);
+        let outfitRaw = '';
+        const outfitIdx = text.indexOf('【服装穿着】');
+        if (outfitIdx !== -1) outfitRaw = text.substring(outfitIdx + 6).trim();
+        return {
+            charName: ex('链接角色') || '角色',
+            race: ex('种族'),
+            age: ex('年龄'),
+            role: ex('身份'),
+            affiliation: ex('所属'),
+            activity: ex('当前活动'),
+            location: ex('所在位置'),
+            favorability: ex('好感度'),
+            heartRate: ex('心率'),
+            temp: ex('体温'),
+            mood: ex('当前状态'),
+            breast: ex('胸部'),
+            vulva: ex('小穴'),
+            sexExp: ex('性经验'),
+            lastSex: ex('最近性行为'),
+            mastFreq: ex('自慰频率'),
+            lastMast: ex('最近自慰'),
+            sensitive: ex('敏感部位'),
+            wetness: ex('湿润状态'),
+            arousal: ex('快感阶段'),
+            cycle: ex('生理周期'),
+            desire: ex('当前欲望'),
+            fantasy: ex('幻想内容'),
+            kink: ex('秘密嗜好'),
+            bodyChange: ex('身体变化'),
+            thought: ex('心理所想'),
+            outfit: this._parseOutfit(outfitRaw)
+        };
+    }
+
+    /** @param {'full'|'status'|'outfit'} mode */
+    async _linkChar(mode = 'full') {
         if (this._loading) return;
+        this._linkMode = mode || 'full';
         this._loading = true;
         this.render();
         try {
@@ -73,21 +229,33 @@ export class EroLinksView {
             const ctx = Bridge.getSTContext();
             if (!ctx) throw new Error('SillyTavern 上下文不可用');
 
+            const prefs = this._prefs || EStore.loadPrefs();
+            const root = this.app.phoneShell?.screen;
+            const inputName = root?.querySelector?.('#el-target-name')?.value?.trim()
+                || prefs.lastTargetName
+                || this._linkedData?.charName
+                || '';
+            if (inputName) this._prefs = EStore.savePrefs({ lastTargetName: inputName });
+
             const worldbookText = Bridge.getWorldbookEnabled('erolinks', true)
                 ? await Bridge.buildWorldbookText('erolinks')
                 : '';
-            const chat = ctx.chat || [];
-            const lastMsg = chat.length > 0 ? chat[chat.length - 1] : null;
-            const lastMessageText = lastMsg
-                ? `${lastMsg.name || '??'}: ${String(lastMsg.mes || '')}`
-                : '（无）';
+            const chatText = EStore.buildChatContext(ctx.chat || [], prefs.chatDepth || 5);
+            const systemPrompt = this._resolveLinkPrompt(worldbookText, chatText, {
+                mode: this._linkMode,
+                targetName: inputName
+            });
 
-            const systemPrompt = this._resolveLinkPrompt(worldbookText, lastMessageText);
+            const userHint = this._linkMode === 'status'
+                ? '请仅更新动态状态字段并按格式输出。'
+                : this._linkMode === 'outfit'
+                    ? '请仅更新服装相关字段并按格式输出。'
+                    : '请建立全量链接并按格式输出。';
 
             const result = await Bridge.callPhoneAI(
                 [
                     { role: 'system', content: systemPrompt },
-                    { role: 'user', content: '请建立链接并输出结果。' }
+                    { role: 'user', content: userHint }
                 ],
                 { appId: 'erolinks', max_tokens: ctx.max_response_length || 2048 }
             );
@@ -95,52 +263,27 @@ export class EroLinksView {
 
             const text = String(result.summary || '');
             this._lastRaw = text;
-            const ex = (label) => {
-                const idx = text.indexOf('【' + label + '】');
-                if (idx === -1) return '';
-                const start = idx + label.length + 2;
-                const rest = text.substring(start);
-                const nb = rest.indexOf('\n【');
-                const val = nb > 0 ? rest.substring(0, nb) : nb === 0 ? rest.substring(1) : rest;
-                return val.trim();
-            };
-            let outfitRaw = '';
-            const outfitIdx = text.indexOf('【服装穿着】');
-            if (outfitIdx !== -1) outfitRaw = text.substring(outfitIdx + 6).trim();
+            const parsed = this._parseLinkResult(text);
+            if (inputName && (!parsed.charName || parsed.charName === '角色')) {
+                parsed.charName = inputName;
+            }
 
-            this._linkedData = {
-                charName: ex('链接角色') || '角色',
-                race: ex('种族'),
-                age: ex('年龄'),
-                role: ex('身份'),
-                affiliation: ex('所属'),
-                activity: ex('当前活动'),
-                location: ex('所在位置'),
-                favorability: ex('好感度'),
-                heartRate: ex('心率'),
-                temp: ex('体温'),
-                mood: ex('当前状态'),
-                breast: ex('胸部'),
-                vulva: ex('小穴'),
-                sexExp: ex('性经验'),
-                lastSex: ex('最近性行为'),
-                mastFreq: ex('自慰频率'),
-                lastMast: ex('最近自慰'),
-                sensitive: ex('敏感部位'),
-                wetness: ex('湿润状态'),
-                arousal: ex('快感阶段'),
-                cycle: ex('生理周期'),
-                desire: ex('当前欲望'),
-                fantasy: ex('幻想内容'),
-                kink: ex('秘密嗜好'),
-                bodyChange: ex('身体变化'),
-                thought: ex('心理所想'),
-                outfit: this._parseOutfit(outfitRaw)
-            };
+            const prev = EStore.getProfile(parsed.charName) || this._linkedData;
+            const mergeMode = this._linkMode === 'status' || this._linkMode === 'outfit'
+                ? this._linkMode
+                : 'full';
+            this._linkedData = EStore.mergeProfiles(prev, parsed, mergeMode);
+            EStore.upsertProfile(this._linkedData);
             this._saveConfirmed();
+            this._prefs = EStore.savePrefs({ lastTargetName: this._linkedData.charName || '' });
             this.currentView = 'linked';
-            this.activeTab = 'info';
+            this.activeTab = this._linkMode === 'outfit' ? 'outfit' : 'info';
             this._outfitChanges = {};
+            this.app.phoneShell?.showNotification?.(
+                this._linkMode === 'full' ? '已链接' : (this._linkMode === 'status' ? '状态已刷新' : '服装已刷新'),
+                this._linkedData.charName,
+                '✅'
+            );
         } catch (err) {
             console.error('[EroLinks]', err, this._lastRaw ? { rawPreview: this._lastRaw.slice(0, 400) } : '');
             this.app.phoneShell?.showNotification?.('链接失败', err.message, '❌');
@@ -149,69 +292,44 @@ export class EroLinksView {
         this.render();
     }
 
-    _resolveLinkPrompt(worldbookText, chatText) {
+    _resolveLinkPrompt(worldbookText, chatText, opts = {}) {
         const wb = worldbookText || '无';
         const chat = chatText || '无';
+        const mode = opts.mode || 'full';
+        const targetName = String(opts.targetName || '').trim();
         const stored = Bridge.getTermPrompt('erolinks', 'link', '');
+        let base;
         if (stored && stored.includes('【链接角色】')) {
-            if (stored.includes('[世界书内容]') || stored.includes('[最后一条聊天记录]')) {
-                return stored
-                    .replace(/\[世界书内容\]/g, wb)
-                    .replace(/\[最后一条聊天记录\]/g, chat);
+            base = stored
+                .replace(/\[世界书内容\]/g, wb)
+                .replace(/\[最后一条聊天记录\]/g, chat)
+                .replace(/\[聊天记录\]/g, chat);
+            if (!base.includes('世界书：') || !base.includes('聊天记录：')) {
+                base = `${base}\n\n世界书：${wb}\n聊天记录：${chat}`;
             }
-            // 用户完全自定义且无占位：附加实时上下文，避免丢世界书/聊天
-            if (!stored.includes('世界书：') || !stored.includes('聊天记录：')) {
-                return `${stored}\n\n世界书：${wb}\n聊天记录：${chat}`;
-            }
-            return stored;
+        } else {
+            base = this._getDefaultLinkPrompt(wb, chat);
         }
-        return this._getDefaultLinkPrompt(wb, chat);
+        const extra = [];
+        if (targetName) {
+            extra.push(`【强制】链接角色固定为【${targetName}】。【链接角色】必须输出该姓名。`);
+        } else {
+            extra.push('【认人】从聊天记录中识别主要角色；多人时优先最近发言或被点名者。');
+        }
+        if (mode === 'status') {
+            extra.push('【本次范围】只更新动态状态：当前活动、所在位置、好感度、心率、体温、当前状态、湿润状态、快感阶段、当前欲望、幻想内容、身体变化、心理所想。其余字段可沿用未知或简写。服装可省略或写无。');
+        } else if (mode === 'outfit') {
+            extra.push('【本次范围】只更新服装穿着各分区。基础信息与动态状态尽量简短或填未知，但【链接角色】必须正确。');
+        }
+        return extra.length ? `${base}\n\n${extra.join('\n')}` : base;
     }
 
     _getDefaultLinkPrompt(worldbookText, chatText) {
-        return `你是EroLinks身心链接模块。请从下方聊天记录中识别当前正在发言或被提及的角色，链接该角色。
+        return `你是EroLinks身心链接模块。根据聊天记录链接一名角色并输出状态。
 
-核心规则——世界书使用判断：
-检查下方世界书中是否存在角色名恰好相同的条目。
-→ 如果有：从该条目提取种族、年龄、身份、所属等基础信息。
-→ 如果没有：完全忽略世界书的所有内容。世界书中即使有其他角色的详细数据，也与目标角色无关，严禁把其他角色的数据填给目标角色。所有字段改为从聊天记录中推断或填写"未知"。
+世界书：仅当存在与【链接角色】同名的条目时，才用其补全基础信息；否则忽略世界书中其他角色数据，勿张冠李戴。不确定的隐私字段填"未知"，禁止编造。
 
-按以下顺序输出（每个字段独占一行，严禁合并）。每个字段的填写指引见括号内：
-
-第一步——基础信息（来源优先级：世界书同名条目 > 聊天记录 > 未知）：
-种族（角色的种族或亚人种，如人类/妖精/精灵/魅魔/猫亚人等）
-年龄（角色的外观年龄或实际年龄，填数字）
-身份（角色在岛上的身份或职业，如学生/教师/社团成员/岛民等）
-所属（角色所属的组织、班级、社团或势力）
-
-第二步——动态状态：
-心率（当前心率数值，仅填数字，范围60-120，平静时偏低兴奋时偏高）
-体温（当前体温数值，仅填数字如36.5，正常约36.2-37.2，兴奋时略高0.3-0.8）
-当前状态（角色当前的情绪和身体状态概述，一句话综合描述）
-当前活动（角色此刻正在做什么，具体描述行为而非泛泛概括）
-所在位置（角色所处的具体地点，越具体越好）
-好感度（角色对体己师{{user}}的好感程度描述）
-心理所想（角色此刻内心活动，以角色第一人称写一句，用「」包裹）
-
-第三步——身体与秘密：
-胸部（乳房的尺寸、形状、触感、色泽、挺翘度等详细描写，≥20字）
-小穴（外阴的外观、色泽、外唇形态、湿润感、紧致度等详细描写，≥20字）
-敏感部位（角色身体哪些部位对触碰格外敏感，具体列出部位并简述敏感特点）
-湿润状态（小穴当前的湿润程度与状态描述）
-快感阶段（当前处于以下哪个阶段：平静无波/微有涟漪/暗流涌动/呼吸渐促/酥麻蔓延/难耐轻吟/临界悬丝/决堤溃坝。选其一，可附加简短描述）
-生理周期（角色当前处于生理周期的哪个阶段，如安全期/危险期/经期等，含天数或周期特征）
-当前欲望（角色此刻的性欲望强度与大致倾向，描述渴望的程度和方向）
-幻想内容（角色近期或此刻的性幻想或隐秘想法，描述具体幻想的情境或对象）
-身体变化（角色身体最近值得注意的变化，如胸围增减、敏感度变化、皮肤状态等）
-
-第四步——隐私（无法从世界书或聊天记录中确定的，一律填"未知"，禁止猜测编造）：
-性经验（若世界书或已确认信息中能明确为处女/非处女才填写，否则填未知，不可从上下文胡乱推断）
-最近性行为（最近一次性接触的时间、对象与大致内容，不确定则填未知）
-自慰频率（角色自慰的大致频率，不确定则填未知）
-最近自慰（最近一次自慰的时间与大致情境，不确定则填未知）
-秘密嗜好（角色不为人知的性癖好或特殊喜好，不确定则填未知）
-
-输出格式（每个字段独占一行，严禁合并）：
+输出格式（每个字段独占一行）：
 【链接角色】值
 【种族】值
 【年龄】值
@@ -238,21 +356,20 @@ export class EroLinksView {
 【秘密嗜好】值
 【身体变化】值
 【心理所想】值
-【服装穿着】⚠️每条"- "独占一行，一行只能写一件衣物。严禁一行内合并多件。格式："- 短名称 | 详细描述"，短名称≤10字，详细描述写颜色款式材质。若该位置赤裸则写"- 无"。
-
-【帽子】-物品（若有则独立一行。若无则写"- 无"）
-【发型】-物品（若有则独立一行。若无则写"- 无"）
-【发饰】-物品（若有则独立一行。若无则写"- 无"）
-【脖子】-物品（围脖、项链、领饰等，每件独立一行。若无则写"- 无"）
-【外套】-物品（若有则独立一行。若无则写"- 无"）
-【内衬】-物品（衬衫、T恤等，若有则独立一行。若无则写"- 无"）
-【胸罩】-物品（需根据人设推断。若有则独立一行。若无则写"- 无"）
-【手套】-物品（若有则独立一行。若无则写"- 无"）
-【裙子/裤子】-物品（若有则独立一行。若无则写"- 无"）
-【内裤】-物品（需根据人设推断。若有则独立一行。若无则写"- 无"）
-【袜子】-物品（若有则独立一行。若无则写"- 无"）
-【鞋子】-物品（若有则独立一行。若无则写"- 无"）
-【装饰】-物品（每个配饰独占一行，手环/脚环/耳环/戒指/背包等各一行。未佩戴则写"- 无"）
+【服装穿着】每件衣物单独一行："- 短名称 | 描述"；无则"- 无"
+【帽子】- …
+【发型】- …
+【发饰】- …
+【脖子】- …
+【外套】- …
+【内衬】- …
+【胸罩】- …
+【手套】- …
+【裙子/裤子】- …
+【内裤】- …
+【袜子】- …
+【鞋子】- …
+【装饰】- …
 
 世界书：${worldbookText || '无'}
 聊天记录：${chatText || '无'}`;
@@ -290,7 +407,61 @@ export class EroLinksView {
 
     _renderLinked() {
         const d = this._linkedData;
-        return `<div class="erolinks-app"><div class="erolinks-bar"><div class="erolinks-bar-btn" onclick="window.NaviTerm.erolinksView._linkChar()">🔄</div><div class="erolinks-bar-btn" onclick="window.NaviTerm.erolinksView.goSettings()">⚙️</div></div><div class="el-tabs">${TABS.map((t) => `<div class="el-tab${this.activeTab === t.key ? ' active' : ''}" onclick="window.NaviTerm.erolinksView.switchTab('${t.key}')">${t.icon}</div>`).join('')}</div><div class="el-tab-content">${this._renderTabContent(d)}</div><div class="el-bottom-bar"><button class="el-disconnect-btn" onclick="window.NaviTerm.erolinksView.disconnect()">🔌 断开链接</button></div></div>`;
+        const busy = this._loading;
+        return `<div class="erolinks-app">
+            <div class="erolinks-bar">
+                <div class="erolinks-bar-btn" onclick="window.NaviTerm.erolinksView.goMain()" style="margin-right:auto">← 档案</div>
+                <div class="erolinks-bar-btn" onclick="window.NaviTerm.erolinksView.goSettings()">⚙️</div>
+            </div>
+            <div class="el-refresh-bar">
+                <button type="button" class="el-refresh-btn" data-mode="full" ${busy ? 'disabled' : ''}>🔄 全量</button>
+                <button type="button" class="el-refresh-btn" data-mode="status" ${busy ? 'disabled' : ''}>💫 状态</button>
+                <button type="button" class="el-refresh-btn" data-mode="outfit" ${busy ? 'disabled' : ''}>👗 服装</button>
+            </div>
+            <div class="el-tabs">${TABS.map((t) =>
+                `<div class="el-tab${this.activeTab === t.key ? ' active' : ''}" data-tab="${t.key}">${t.icon}</div>`
+            ).join('')}</div>
+            <div class="el-tab-content">${this._renderTabContent(d)}</div>
+            <div class="el-bottom-bar">
+                <button type="button" class="el-export-btn" id="el-export-status">📤 导出状态</button>
+                <button type="button" class="el-disconnect-btn" id="el-disconnect">🔌 断开链接</button>
+            </div>
+        </div>`;
+    }
+
+    _bindLinked() {
+        const root = this.app.phoneShell.screen;
+        if (!root || this.currentView !== 'linked') return;
+        root.querySelectorAll('.el-refresh-btn').forEach((btn) => {
+            btn.addEventListener('click', () => {
+                if (this._loading) return;
+                const mode = btn.dataset.mode || 'full';
+                this._prefs = EStore.savePrefs({ lastTargetName: this._linkedData?.charName || '' });
+                this._linkChar(mode);
+            });
+        });
+        root.querySelectorAll('.el-tab').forEach((tab) => {
+            tab.addEventListener('click', () => this.switchTab(tab.dataset.tab || 'info'));
+        });
+        root.querySelector('#el-disconnect')?.addEventListener('click', () => this.disconnect());
+        root.querySelector('#el-export-status')?.addEventListener('click', () => this.exportStatus());
+        root.querySelector('#el-outfit-apply')?.addEventListener('click', () => this._applyOutfit());
+        root.querySelectorAll('.el-hypno-card').forEach((card) => {
+            card.addEventListener('click', () => this._selectHypno(card.dataset.hypno || ''));
+        });
+    }
+
+    exportStatus() {
+        if (!this._linkedData) {
+            this.app.phoneShell?.showNotification?.('无链接角色', '', '❌');
+            return;
+        }
+        const text = EStore.formatStatusExport(this._linkedData);
+        if (!Bridge.appendToChatInput(text)) {
+            this.app.phoneShell?.showNotification?.('写入失败', '未找到输入框', '❌');
+            return;
+        }
+        this.app.phoneShell?.showNotification?.('已导出状态', this._linkedData.charName || '', '✅');
     }
 
     _renderTabContent(d) {
@@ -340,7 +511,7 @@ export class EroLinksView {
                 return html;
             }).join('')
             : `<div class="el-placeholder"><div class="el-placeholder-icon">👗</div><div>暂无服装数据</div></div>`;
-        return `<div style="flex:1;display:flex;flex-direction:column;overflow:hidden;"><div class="el-outfit-scroll">${body}</div>${hasAny ? `<div class="el-outfit-bottom"><button class="el-outfit-apply" onclick="window.NaviTerm.erolinksView._applyOutfit()">📋 确定变更</button></div>` : ''}</div>`;
+        return `<div style="flex:1;display:flex;flex-direction:column;overflow:hidden;"><div class="el-outfit-scroll">${body}</div>${hasAny ? `<div class="el-outfit-bottom"><button type="button" class="el-outfit-apply" id="el-outfit-apply">📋 预览并写入</button></div>` : ''}</div>`;
     }
 
     _toggleOutfit(key, action) {
@@ -355,9 +526,16 @@ export class EroLinksView {
         this.render();
     }
 
-    _applyOutfit() {
+    _buildOutfitCommand() {
         const parts = [];
         const o = this._linkedData?.outfit || {};
+        // 先把 replace 输入框当前值同步进 _outfitChanges
+        Object.keys(this._outfitChanges).forEach((key) => {
+            const inp = document.getElementById('el-outfit-input-' + key);
+            if (inp && this._outfitChanges[key]?.action === 'replace') {
+                this._outfitChanges[key].value = inp.value;
+            }
+        });
         Object.entries(this._outfitChanges).forEach(([key, ch]) => {
             const si = key.lastIndexOf('_');
             const zone = key.substring(0, si);
@@ -367,12 +545,22 @@ export class EroLinksView {
             const nm = item.name || item;
             if (ch.action === 'remove') parts.push('脱掉 ' + nm);
             else if (ch.action === 'replace') {
-                const to = ch.value?.trim();
+                const to = String(ch.value || '').trim();
                 if (to) parts.push('更换 ' + nm + ' 为 ' + to);
             }
         });
-        if (!parts.length) return;
-        const cmd = '发出命令：' + parts.join('，');
+        if (!parts.length) return '';
+        const who = this._linkedData?.charName ? `（对${this._linkedData.charName}）` : '';
+        return `发出命令${who}：` + parts.join('，');
+    }
+
+    _applyOutfit() {
+        const cmd = this._buildOutfitCommand();
+        if (!cmd) {
+            this.app.phoneShell?.showNotification?.('无变更', '请先选择脱下或更换', 'ℹ️');
+            return;
+        }
+        if (!confirm(`预览命令，确认写入输入框？\n\n${cmd}`)) return;
         if (!Bridge.appendToChatInput(cmd)) {
             this.app.phoneShell?.showNotification?.('写入失败', '未找到输入框', '❌');
             return;
@@ -427,22 +615,46 @@ export class EroLinksView {
         return result;
     }
 
-    _renderHypnoTab() {
-        const modes = [
-            { k: 'mind_ctrl', n: '意识催眠', d: '完全听从指令的人偶状态', i: '🧿' },
-            { k: 'body_ctrl', n: '身体控制', d: '控制身体动作但不控制思想', i: '🦾' },
-            { k: 'common_sense', n: '常识改变', d: '将指定内容植入为理所当然的常识', i: '💉' },
-            { k: 'sense_ctrl', n: '感官操控', d: '放大或压制特定感官敏感度', i: '👁' },
-            { k: 'emotion', n: '情绪注入', d: '注入特定情绪状态', i: '💫' },
-            { k: 'trigger', n: '触发词', d: '设定条件反射触发器', i: '🔑' },
-            { k: 'memory', n: '记忆修改', d: '植入或抑制特定记忆', i: '📝' },
-            { k: 'persona', n: '人格覆盖', d: '在现有性格上叠加临时人格', i: '🎭' }
+    _hypnoModes() {
+        return [
+            { k: 'mind_ctrl', n: '意识催眠', d: '完全听从指令的人偶状态', i: '🧿', draft: '进入意识催眠：对体己师的指令视为最高优先，行动顺从，神情恍惚但仍可简短应答。' },
+            { k: 'body_ctrl', n: '身体控制', d: '控制身体动作但不控制思想', i: '🦾', draft: '进入身体控制：肢体按指令动作，意识清醒可表达内心，但身体暂时不由自己主导。' },
+            { k: 'common_sense', n: '常识改变', d: '将指定内容植入为理所当然的常识', i: '💉', draft: '常识植入：（在此填写要变成理所当然的内容）。目标将其视为一向如此的常理，不质疑来源。' },
+            { k: 'sense_ctrl', n: '感官操控', d: '放大或压制特定感官敏感度', i: '👁', draft: '感官操控：将（部位/感官）的敏感度调整为（放大/压制），持续时间（自定）。' },
+            { k: 'emotion', n: '情绪注入', d: '注入特定情绪状态', i: '💫', draft: '情绪注入：使目标沉浸在（情绪，如安心/羞赧/依恋）中，言行与该情绪一致。' },
+            { k: 'trigger', n: '触发词', d: '设定条件反射触发器', i: '🔑', draft: '设定触发词「___」：听到时执行（动作/状态），触发后（恢复/保持）。' },
+            { k: 'memory', n: '记忆修改', d: '植入或抑制特定记忆', i: '📝', draft: '记忆调整：对（事件）采取（模糊/抑制/轻描淡写的改写），日常不主动回想。' },
+            { k: 'persona', n: '人格覆盖', d: '在现有性格上叠加临时人格', i: '🎭', draft: '临时人格覆盖：在本我之上叠加（气质/口吻），结束后可褪去，不抹除原性格。' }
         ];
-        return `<div class="el-hypno-scroll"><div class="el-hypno-grid">${modes.map((m) => `<div class="el-hypno-card" onclick="window.NaviTerm.erolinksView._selectHypno('${m.k}')"><div class="el-hypno-card-icon">${m.i}</div><div class="el-hypno-card-name">${m.n}</div><div class="el-hypno-card-desc">${m.d}</div></div>`).join('')}</div></div>`;
+    }
+
+    _renderHypnoTab() {
+        const modes = this._hypnoModes();
+        const who = this._linkedData?.charName || '目标';
+        return `<div class="el-hypno-scroll">
+            <div class="el-hypno-hint">点选模式 → 预览指令草稿 → 确认后写入输入框（需自行改括号内容）</div>
+            <div class="el-hypno-grid">${modes.map((m) =>
+                `<div class="el-hypno-card" data-hypno="${m.k}">
+                    <div class="el-hypno-card-icon">${m.i}</div>
+                    <div class="el-hypno-card-name">${m.n}</div>
+                    <div class="el-hypno-card-desc">${m.d}</div>
+                </div>`
+            ).join('')}</div>
+            <div class="el-hypno-foot">当前对象：${this._esc(who)}</div>
+        </div>`;
     }
 
     _selectHypno(k) {
-        this.app.phoneShell?.showNotification?.('催眠', k + ' 开发中...', '🧠');
+        const m = this._hypnoModes().find((x) => x.k === k);
+        if (!m) return;
+        const who = this._linkedData?.charName || '目标';
+        const draft = `【EroLinks 催眠草稿 · ${m.n}】\n对象：${who}\n${m.draft}\n（请按剧情改写括号/空白处后再发送。）`;
+        if (!confirm(`预览指令，确认写入输入框？\n\n${draft}`)) return;
+        if (!Bridge.appendToChatInput(draft)) {
+            this.app.phoneShell?.showNotification?.('写入失败', '未找到输入框', '❌');
+            return;
+        }
+        this.app.phoneShell?.showNotification?.('已写入草稿', m.n, '✅');
     }
 
     _renderSettings() {
@@ -453,9 +665,19 @@ export class EroLinksView {
             this._getDefaultLinkPrompt('[世界书内容]', '[最后一条聊天记录]')
         );
         const bridgeStatus = Bridge.describeReadiness();
+        const archN = EStore.loadArchive().length;
         return `<div class="erolinks-app"><div class="erolinks-bar"><div class="erolinks-bar-btn" onclick="window.NaviTerm.erolinksView.goBack()" style="margin-right:auto;">← 返回</div></div><div class="erolinks-scroll"><div class="erolinks-s-body">
             <div class="erolinks-s-section"><div class="erolinks-s-section-title">🔌 桥接状态</div><div style="font-size:12px;color:${bridgeStatus.level === 'ok' ? '#52c41a' : bridgeStatus.level === 'warn' ? '#faad14' : '#ff4d4f'}">${this._esc(bridgeStatus.message)}</div></div>
-            <div class="erolinks-s-section"><div class="erolinks-s-section-title">🔗 LINK 提示词</div><textarea id="erolinks-s-prompt" class="erolinks-s-textarea">${this._esc(promptContent)}</textarea><div class="erolinks-s-btn-row"><button class="erolinks-s-btn erolinks-s-btn-warn" id="erolinks-s-prompt-reset">恢复默认</button><button class="erolinks-s-btn erolinks-s-btn-primary" id="erolinks-s-prompt-save">保存提示词</button></div></div>
+            <div class="erolinks-s-section">
+                <div class="erolinks-s-section-title">📖 使用说明</div>
+                <div class="erolinks-s-desc">
+                    · 主页可填<strong>目标姓名</strong>（空=从聊天识别）与<strong>上下文条数</strong><br>
+                    · LINK 成功写入<strong>角色档案</strong>（当前 ${archN} 人），可点开/删除<br>
+                    · 已链接页：<strong>全量 / 状态 / 服装</strong>分层刷新；可导出状态、预览服装命令<br>
+                    · 催眠：生成可改写的指令草稿到输入框
+                </div>
+            </div>
+            <div class="erolinks-s-section"><div class="erolinks-s-section-title">🔗 LINK 提示词</div><div class="erolinks-s-desc">可用占位符 [世界书内容] [聊天记录]。保存后仅影响本机。</div><textarea id="erolinks-s-prompt" class="erolinks-s-textarea">${this._esc(promptContent)}</textarea><div class="erolinks-s-btn-row"><button class="erolinks-s-btn erolinks-s-btn-warn" id="erolinks-s-prompt-reset">恢复默认</button><button class="erolinks-s-btn erolinks-s-btn-primary" id="erolinks-s-prompt-save">保存提示词</button></div></div>
             <div class="erolinks-s-section"><div class="erolinks-s-row"><span>📚 注入世界书</span><label class="toggle-switch" style="flex:0 0 auto;"><input type="checkbox" id="erolinks-use-worldbook" ${wbEnabled ? 'checked' : ''}><span class="toggle-slider"></span></label></div>
             <div class="nt-fold erolinks-worldbook-fold" data-default-open="false" style="margin-top:10px;"><div class="nt-fold-header"><div class="nt-fold-main"><div class="nt-fold-title">世界书选择</div><div class="nt-fold-desc">展开后勾选要注入的酒馆世界书</div></div><span class="nt-fold-arrow">›</span></div><div class="nt-fold-content"><div id="erolinks-worldbook-list"></div></div></div>
             </div>

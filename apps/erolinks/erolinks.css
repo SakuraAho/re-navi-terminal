@@ -12,7 +12,28 @@
 @keyframes el-pulse-ctrl{0%,100%{opacity:0.6;}50%{opacity:1;}}
 
 /* 主页 */
-.erolinks-main{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:20px;}
+.erolinks-main{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:16px;padding:8px 14px 20px;min-height:0;}
+.erolinks-main.el-main-scroll{justify-content:flex-start;overflow-y:auto;-webkit-overflow-scrolling:touch;}
+.el-link-form{width:100%;max-width:320px;display:flex;flex-direction:column;gap:10px;}
+.el-field{display:flex;flex-direction:column;gap:6px;}
+.el-field-label{font-size:11px;color:rgba(255,255,255,0.4);}
+.el-input{width:100%;box-sizing:border-box;padding:10px 12px;border-radius:10px;border:1px solid rgba(180,130,255,0.25);background:rgba(0,0,0,0.25);color:#e8e0ff;font-size:13px;}
+.el-input:focus{outline:none;border-color:rgba(180,130,255,0.55);}
+.el-depth-row{display:flex;gap:6px;flex-wrap:wrap;}
+.el-depth-btn{flex:1;min-width:72px;padding:8px 6px;border-radius:8px;border:1px solid rgba(255,255,255,0.12);background:rgba(255,255,255,0.04);color:rgba(255,255,255,0.55);font-size:11px;cursor:pointer;}
+.el-depth-btn.on{border-color:rgba(180,130,255,0.5);background:rgba(150,80,255,0.18);color:#e0d0ff;font-weight:600;}
+.el-arch-block{width:100%;max-width:320px;margin-top:4px;}
+.el-arch-title{font-size:12px;font-weight:600;color:rgba(200,180,255,0.7);margin-bottom:8px;}
+.el-arch-list{display:flex;flex-direction:column;gap:6px;}
+.el-arch-row{display:flex;gap:6px;align-items:stretch;}
+.el-arch-item{flex:1;text-align:left;padding:10px 12px;border-radius:10px;border:1px solid rgba(180,130,255,0.18);background:rgba(120,60,200,0.1);cursor:pointer;display:flex;flex-direction:column;gap:3px;}
+.el-arch-item:hover{border-color:rgba(180,130,255,0.4);background:rgba(140,80,220,0.16);}
+.el-arch-del{width:36px;border-radius:10px;border:1px solid rgba(255,80,80,0.25);background:rgba(255,60,60,0.08);color:#ff8080;font-size:18px;cursor:pointer;flex-shrink:0;}
+.el-arch-del:hover{background:rgba(255,60,60,0.18);}
+.el-arch-name{font-size:14px;font-weight:600;color:#e0d0ff;}
+.el-arch-meta{font-size:10px;color:rgba(255,255,255,0.35);}
+.el-arch-empty{font-size:12px;color:rgba(255,255,255,0.28);padding:12px;text-align:center;border:1px dashed rgba(255,255,255,0.12);border-radius:10px;}
+.el-arch-hint{font-size:10px;color:rgba(255,255,255,0.22);margin-top:6px;text-align:center;}
 .erolinks-link-btn{position:relative;width:160px;height:160px;border-radius:50%;background:radial-gradient(circle at 45% 40%,#4a2d7a,#1a0a3e);border:3px solid rgba(180,130,255,0.5);cursor:pointer;display:flex;flex-direction:column;align-items:center;justify-content:center;transition:all 0.3s;box-shadow:0 0 40px rgba(150,50,255,0.25),inset 0 0 30px rgba(150,50,255,0.06);}
 .erolinks-link-btn:hover{border-color:rgba(200,150,255,0.8);box-shadow:0 0 60px rgba(150,50,255,0.45),inset 0 0 40px rgba(150,50,255,0.12);transform:scale(1.05);}
 .erolinks-link-btn:active{transform:scale(0.95);}
@@ -33,6 +54,14 @@
 .el-scan-btn:active{transform:scale(0.98);}
 .el-scan-btn-name{font-size:16px;color:#e0d0ff;display:block;}
 .el-scan-btn-desc{font-size:12px;color:rgba(255,255,255,0.35);display:block;}
+
+/* 刷新条 */
+.el-refresh-bar{display:flex;gap:6px;padding:4px 14px 8px;flex-shrink:0;}
+.el-refresh-btn{flex:1;padding:8px 4px;border-radius:8px;border:1px solid rgba(180,130,255,0.25);background:rgba(140,80,220,0.12);color:#d0c0ff;font-size:11px;font-weight:600;cursor:pointer;}
+.el-refresh-btn:hover{background:rgba(140,80,220,0.22);}
+.el-refresh-btn:disabled{opacity:0.45;cursor:not-allowed;}
+.el-export-btn{width:100%;padding:12px;border:1px solid rgba(100,180,255,0.3);border-radius:12px;background:rgba(80,140,255,0.1);color:#a0c8ff;font-size:14px;font-weight:600;cursor:pointer;margin-bottom:0;}
+.el-export-btn:hover{background:rgba(80,140,255,0.18);}
 
 /* 标签栏 */
 .el-tabs{display:flex;justify-content:center;gap:4px;padding:4px 14px;flex-shrink:0;border-bottom:1px solid rgba(255,255,255,0.06);}
@@ -105,6 +134,8 @@
 
 /* ===== 催眠 ===== */
 .el-hypno-scroll{flex:1;overflow-y:auto;-webkit-overflow-scrolling:touch;padding:0 14px 20px;}
+.el-hypno-hint{font-size:11px;color:rgba(200,180,255,0.45);line-height:1.45;margin:8px 0 12px;text-align:center;}
+.el-hypno-foot{font-size:11px;color:rgba(255,255,255,0.3);text-align:center;margin-top:12px;}
 .el-hypno-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px;}
 .el-hypno-card{background:rgba(140,60,255,0.06);border:1px solid rgba(140,60,255,0.12);border-radius:12px;padding:16px 12px;cursor:pointer;transition:all 0.15s;text-align:center;}
 .el-hypno-card:hover{background:rgba(140,60,255,0.12);border-color:rgba(140,60,255,0.25);transform:translateY(-1px);}
@@ -117,6 +148,7 @@
 .erolinks-s-body{padding:10px 14px;}
 .erolinks-s-section{background:rgba(255,255,255,0.05);border-radius:10px;padding:14px;margin-bottom:10px;border:1px solid rgba(255,255,255,0.08);}
 .erolinks-s-section-title{font-size:13px;font-weight:600;color:#ddd;margin-bottom:10px;}
+.erolinks-s-desc{font-size:12px;color:rgba(255,255,255,0.45);line-height:1.55;margin-bottom:8px;}
 .erolinks-s-row{display:flex;align-items:center;justify-content:space-between;font-size:13px;color:#ddd;gap:10px;}
 .erolinks-wb-item{display:flex;align-items:center;gap:8px;padding:7px 0;font-size:12px;color:#333;cursor:pointer;border-bottom:1px solid rgba(0,0,0,0.06);}
 .erolinks-wb-item:last-child{border-bottom:none;}
