@@ -124,8 +124,59 @@ export function outfitHasItems(outfit) {
     return Object.values(outfit).some((arr) => Array.isArray(arr) && arr.length > 0);
 }
 
+/** 细槽位（与提示词【帽子】【胸罩】等一一对应，避免全挤在上身/下身） */
+export const OUTFIT_SLOTS = Object.freeze([
+    { id: 'hat', label: '帽子', match: (s) => s === '帽子' || (s.includes('帽') && !s.includes('发')) },
+    { id: 'hair', label: '发型', hair: true, match: (s) => s === '发型' || s === '头发' },
+    { id: 'hairAcc', label: '发饰', match: (s) => s.includes('发饰') || s === '发夹' || s === '发带' },
+    { id: 'neck', label: '脖子', match: (s) => s.includes('脖') || s.includes('颈') || s.includes('领饰') },
+    { id: 'coat', label: '外套', match: (s) => s.includes('外套') || s.includes('外衣') || s.includes('夹克') },
+    { id: 'shirt', label: '内衬', match: (s) => s.includes('内衬') || s.includes('衬衫') || s === '上衣' },
+    { id: 'bra', label: '胸罩', match: (s) => s.includes('胸罩') || s.includes('文胸') || s.includes('内衣') },
+    { id: 'gloves', label: '手套', match: (s) => s.includes('手套') },
+    { id: 'bottom', label: '裙子/裤子', match: (s) => (s.includes('裙') || s.includes('裤')) && !s.includes('内') },
+    { id: 'panties', label: '内裤', match: (s) => s.includes('内裤') || s.includes('底裤') },
+    { id: 'socks', label: '袜子', match: (s) => s.includes('袜') },
+    { id: 'shoes', label: '鞋子', match: (s) => s.includes('鞋') || s.includes('靴') },
+    { id: 'acc', label: '装饰', match: (s) => s.includes('装饰') || s.includes('饰品') || s.includes('首饰') }
+]);
+
 export function emptyOutfit() {
-    return { head: [], neck: [], upper: [], hands: [], lower: [], legs: [], acc: [] };
+    const o = {};
+    OUTFIT_SLOTS.forEach((s) => { o[s.id] = []; });
+    // 兼容旧 zone 键
+    o.head = o.head || [];
+    o.neck = o.neck || [];
+    o.upper = o.upper || [];
+    o.hands = o.hands || [];
+    o.lower = o.lower || [];
+    o.legs = o.legs || [];
+    return o;
+}
+
+export function matchOutfitSlotId(header) {
+    const s = String(header || '').trim();
+    for (const slot of OUTFIT_SLOTS) {
+        if (slot.match(s)) return slot.id;
+    }
+    return '';
+}
+
+/** 短名称过糊时补上衣物种类，如「白色」+胸罩 →「白色胸罩」 */
+export function clarifyGarmentName(slotLabel, name, desc) {
+    let n = String(name || '').trim();
+    const d = String(desc || '').trim();
+    if (!n || n === '未穿着' || n === '待确认' || n === '无') return n;
+    if (slotLabel === '发型') return n;
+    const typeRe = /衣|裙|裤|袜|鞋|靴|帽|罩|衫|袖|巾|带|饰|手套|外套|内衣|内裤|文胸|夹克|大衣|T恤|卫衣/;
+    if (!typeRe.test(n) && slotLabel && !n.includes(slotLabel)) {
+        // 「白色基本款」→「白色基本款胸罩」
+        n = `${n}${slotLabel}`;
+    }
+    if (d && d !== n && !n.includes(d.slice(0, 4))) {
+        // keep desc separate
+    }
+    return n;
 }
 
 /** 规范单槽：bare/pending/item/hair 都保留，禁止把「未穿着」丢成空数组 */
@@ -140,21 +191,52 @@ export function normalizeOutfitSlot(item) {
 export function normalizeOutfit(outfit) {
     const base = emptyOutfit();
     if (!outfit || typeof outfit !== 'object') return base;
-    Object.keys(base).forEach((z) => {
-        const arr = Array.isArray(outfit[z]) ? outfit[z] : [];
-        base[z] = arr.map(normalizeOutfitSlot).filter(Boolean);
+    // 新槽位
+    OUTFIT_SLOTS.forEach((slot) => {
+        const arr = Array.isArray(outfit[slot.id]) ? outfit[slot.id] : [];
+        base[slot.id] = arr.map((it) => {
+            const st = normalizeOutfitSlot(it);
+            if (st.bare || st.pending || st.hair) return st;
+            const name = clarifyGarmentName(slot.label, st.name, st.desc);
+            return { ...st, name, slotLabel: slot.label };
+        });
+    });
+    // 旧 zone → 迁入细槽（仅当细槽仍空）
+    const legacyMap = {
+        head: ['hat', 'hair', 'hairAcc'],
+        neck: ['neck'],
+        upper: ['coat', 'shirt', 'bra'],
+        hands: ['gloves'],
+        lower: ['bottom', 'panties'],
+        legs: ['socks', 'shoes'],
+        acc: ['acc']
+    };
+    Object.entries(legacyMap).forEach(([legacy, ids]) => {
+        const arr = Array.isArray(outfit[legacy]) ? outfit[legacy] : [];
+        if (!arr.length) return;
+        const allEmpty = ids.every((id) => !base[id]?.length);
+        if (!allEmpty) return;
+        // 无法细分时放入第一个非发型槽
+        const target = ids.find((id) => id !== 'hair') || ids[0];
+        const slot = OUTFIT_SLOTS.find((s) => s.id === target);
+        base[target] = arr.map((it) => {
+            const st = normalizeOutfitSlot(it);
+            if (st.bare || st.pending || st.hair) return st;
+            return { ...st, name: clarifyGarmentName(slot?.label || '', st.name, st.desc), slotLabel: slot?.label || '' };
+        });
     });
     return base;
 }
 
-/** 分区合并：patch 某区有条目则覆盖该区；否则保留 base */
+/** 分区合并：patch 某槽有条目则覆盖该槽；否则保留 base */
 export function mergeOutfit(baseOutfit, patchOutfit) {
     const b = normalizeOutfit(baseOutfit);
     const p = normalizeOutfit(patchOutfit);
     if (!outfitHasItems(p)) return b;
     const out = emptyOutfit();
-    Object.keys(out).forEach((z) => {
-        out[z] = p[z].length ? p[z] : b[z];
+    OUTFIT_SLOTS.forEach((slot) => {
+        const id = slot.id;
+        out[id] = p[id]?.length ? p[id] : (b[id] || []);
     });
     return out;
 }

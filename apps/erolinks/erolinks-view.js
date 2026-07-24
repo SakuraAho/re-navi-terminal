@@ -45,7 +45,7 @@ export class EroLinksView {
         if (window.NaviTerm) window.NaviTerm.erolinksView = this;
         Bridge.ensurePromptDefaults('erolinks', {
             link: { enabled: true, name: 'EroLinks LINK', content: this._getDefaultLinkPrompt('[世界书内容]', '[聊天记录]'), order: 10 }
-        }, 7);
+        }, 8);
     }
 
     _esc(v) { return Bridge.escapeHtml(v); }
@@ -394,11 +394,14 @@ export class EroLinksView {
 3. 正文未提某槽 → 保持步骤1的世界书结果，不要改成待确认。
 4. 仅当世界书与正文都完全未提供该槽信息时，才输出"- 待确认"。
 每个分区必须输出一行，三态只能其一：
-- 有衣："- 短名称 | 描述"
+- 有衣："- 种类明确的短名称 | 颜色材质等描述"
 - 明确无衣/已脱掉/全裸设定："- 无"
 - 两边都无信息："- 待确认"
-禁止「未提及」。禁止无依据默认全身无衣（除非世界书写明全裸日常）。发型只写【发型】不可脱。
-【鞋子】等分区：正文写脱下后必须是"- 无"。
+短名称规则（重要）：必须能看出是什么衣服，例如「白色棉质胸罩」「浅灰西装裤」「黑色皮鞋」。
+禁止只写颜色或「基本款」「白色」「简单」而不带种类词。
+【胸罩】【内裤】【内衬】【外套】【裙子/裤子】必须分开写，不要把内衣糊成「上身/下身白色基本款」。
+禁止「未提及」。发型只写【发型】不可脱。
+正文脱掉某物后对应槽必须"- 无"。
 
 输出格式（每字段独占一行）：
 【链接角色】值
@@ -621,54 +624,39 @@ export class EroLinksView {
         return this._renderOutfitTab({ readonly: true });
     }
 
-    _outfitZones() {
-        return [
-            { id: 'head', l: '头部' },
-            { id: 'neck', l: '脖子' },
-            { id: 'upper', l: '上身' },
-            { id: 'hands', l: '双手' },
-            { id: 'lower', l: '下身' },
-            { id: 'legs', l: '腿脚' },
-            { id: 'acc', l: '装饰' }
-        ];
-    }
-
     /** @param {{readonly?: boolean}} opts */
     _renderOutfitTab(opts = {}) {
         const readonly = !!opts.readonly;
-        const o = this._linkedData?.outfit || {};
-        const zs = this._outfitZones();
-        let any = false;
-        const body = zs.map((z) => {
-            let items = o[z.id] || [];
-            // 空分区 = 待确认（不默认全裸；有世界书/正文依据时由 AI 填衣物或「无」）
-            if (!items.length) items = [{ name: '待确认', desc: '' }];
-            let html = `<div class="el-outfit-zone"><div class="el-outfit-zone-title">${z.l}</div>`;
+        const o = EStore.normalizeOutfit(this._linkedData?.outfit || {});
+        const body = EStore.OUTFIT_SLOTS.map((slot) => {
+            let items = o[slot.id] || [];
+            if (!items.length) items = [{ name: '待确认', desc: '', pending: true }];
+            let html = `<div class="el-outfit-zone"><div class="el-outfit-zone-title">${this._esc(slot.label)}</div>`;
             items.forEach((item, idx) => {
                 const st = EStore.outfitSlotState(item);
-                if (st.state === 'hair') {
-                    any = true;
-                    html += `<div class="el-outfit-item el-outfit-hair"><div class="el-outfit-info"><span class="el-outfit-name">${this._esc(st.name)}</span>${st.desc ? `<span class="el-outfit-desc">${this._esc(st.desc)}</span>` : ''}<span class="el-outfit-tag">发型·只读</span></div></div>`;
+                const key = slot.id + '_' + idx;
+                if (slot.hair || st.state === 'hair' || item.hair) {
+                    const nm = st.name || item.name || '发型';
+                    const ds = st.desc || item.desc || '';
+                    html += `<div class="el-outfit-item el-outfit-hair"><div class="el-outfit-info"><span class="el-outfit-name">${this._esc(nm)}</span>${ds && ds !== nm ? `<span class="el-outfit-desc">${this._esc(ds)}</span>` : ''}<span class="el-outfit-tag">发型·只读</span></div></div>`;
                     return;
                 }
-                any = true;
-                const key = z.id + '_' + idx;
+                const stateTag = st.state === 'bare' ? '未穿着' : (st.state === 'pending' ? '待确认' : '衣物');
                 const label = st.state === 'bare' ? '未穿着' : (st.state === 'pending' ? '待确认' : st.name);
-                const desc = st.state === 'item' ? st.desc : '';
+                const desc = st.state === 'item' ? (st.desc && st.desc !== st.name ? st.desc : '') : '';
                 if (readonly) {
-                    html += `<div class="el-outfit-item"><div class="el-outfit-info"><span class="el-outfit-name">${this._esc(label)}</span>${desc ? `<span class="el-outfit-desc">${this._esc(desc)}</span>` : ''}<span class="el-outfit-tag">${st.state === 'bare' ? '未穿着' : st.state === 'pending' ? '待确认' : '衣物'}</span></div></div>`;
+                    html += `<div class="el-outfit-item"><div class="el-outfit-info"><span class="el-outfit-name">${this._esc(label)}</span>${desc ? `<span class="el-outfit-desc">${this._esc(desc)}</span>` : ''}<span class="el-outfit-tag">${stateTag}</span></div></div>`;
                     return;
                 }
-                // 着装指令模式
                 const canRemove = st.state === 'item';
                 const canReplace = st.state === 'item' || st.state === 'bare';
                 const ch = this._outfitChanges[key] || {};
                 const removed = ch.action === 'remove';
                 const replacing = ch.action === 'replace';
-                html += `<div class="el-outfit-item${removed ? ' removed' : ''}"><div class="el-outfit-info"><span class="el-outfit-name">${this._esc(label)}</span>${desc ? `<span class="el-outfit-desc">${this._esc(desc)}</span>` : ''}</div><div class="el-outfit-actions">
+                html += `<div class="el-outfit-item${removed ? ' removed' : ''}"><div class="el-outfit-info"><span class="el-outfit-name">${this._esc(label)}</span>${desc ? `<span class="el-outfit-desc">${this._esc(desc)}</span>` : ''}<span class="el-outfit-tag">${stateTag}</span></div><div class="el-outfit-actions">
                     <button type="button" class="el-outfit-btn${removed ? ' active' : ''}" data-okey="${key}" data-oact="remove" ${canRemove ? '' : 'disabled'}>脱下</button>
                     <button type="button" class="el-outfit-btn${replacing ? ' active' : ''}" data-okey="${key}" data-oact="replace" ${canReplace ? '' : 'disabled'}>${st.state === 'bare' ? '穿上' : '更换'}</button>
-                </div>${replacing && canReplace ? `<div class="el-outfit-replace"><input class="el-outfit-input" id="el-outfit-input-${key}" placeholder="${st.state === 'bare' ? '穿上…' : '更换为…'}" value="${this._esc(ch.value || '')}"></div>` : ''}</div>`;
+                </div>${replacing && canReplace ? `<div class="el-outfit-replace"><input class="el-outfit-input" id="el-outfit-input-${key}" placeholder="${st.state === 'bare' ? '穿上何种衣物…' : '更换为…'}" value="${this._esc(ch.value || '')}"></div>` : ''}</div>`;
             });
             html += '</div>';
             return html;
@@ -676,7 +664,7 @@ export class EroLinksView {
         if (readonly) {
             return `<div style="flex:1;overflow:auto" class="el-outfit-scroll">${body}<div class="el-ro-hint">只读。更衣请到「催眠与指令 → 着装」</div></div>`;
         }
-        return `<div style="flex:1;display:flex;flex-direction:column;overflow:hidden"><div class="el-outfit-scroll">${body || '<div class="el-placeholder">暂无服装数据，请先刷新服装</div>'}</div><div class="el-outfit-bottom"><button type="button" class="el-outfit-apply" id="el-outfit-apply">📋 预览并写入指令</button></div></div>`;
+        return `<div style="flex:1;display:flex;flex-direction:column;overflow:hidden"><div class="el-outfit-scroll">${body}</div><div class="el-outfit-bottom"><button type="button" class="el-outfit-apply" id="el-outfit-apply">📋 预览并写入指令</button></div></div>`;
     }
 
     _renderDressCommandTab() {
@@ -775,47 +763,48 @@ export class EroLinksView {
         if (!raw) return EStore.emptyOutfit();
         const result = EStore.emptyOutfit();
         const lines = String(raw).split('\n');
-        let cz = '';
-        const getZone = (z) => {
-            const s = String(z || '');
-            if (s.includes('帽') || s.includes('发型') || s.includes('发饰') || (s.includes('头') && !s.includes('颈'))) return 'head';
-            if (s.includes('发') && !s.includes('饰')) return 'head';
-            if (s.includes('脖') || s.includes('领') || s.includes('颈')) return 'neck';
-            if (s.includes('胸罩') || s.includes('内衣') || s.includes('外套') || s.includes('内衬') || s.includes('上身') || s.includes('衬衫') || s.includes('T恤')) return 'upper';
-            if (s.includes('手套') || (s.includes('手') && !s.includes('机'))) return 'hands';
-            if (s.includes('裙') || s.includes('裤') || s.includes('内裤') || s.includes('下身')) return 'lower';
-            if (s.includes('袜') || s.includes('鞋') || s.includes('靴') || s.includes('腿') || s.includes('脚')) return 'legs';
-            if (s.includes('饰') || s.includes('环') || s.includes('包')) return 'acc';
-            return '';
-        };
-        const toItem = (n) => {
+        let slotId = '';
+        let slotLabel = '';
+        const toItem = (n, label) => {
             let t = String(n || '').replace(/^-\s*/, '').trim();
-            // 正文脱下后常见写法
             if (/^(已)?(脱掉|脱下|除去)/.test(t) || t === '无' || t === '未穿着') {
-                return { name: '未穿着', desc: '', bare: true };
+                return { name: '未穿着', desc: '', bare: true, slotLabel: label };
+            }
+            if (t === '待确认' || t === '未提及') {
+                return { name: '待确认', desc: '', pending: true, slotLabel: label };
             }
             const pipe = t.indexOf('|');
-            const name = (pipe >= 0 ? t.substring(0, pipe) : t).trim();
-            const desc = (pipe >= 0 ? t.substring(pipe + 1) : t).trim();
-            return { name: name.replace(/（.*?）$/g, '').trim(), desc: desc.replace(/（.*?）$/g, '').trim() };
+            let name = (pipe >= 0 ? t.substring(0, pipe) : t).trim();
+            let desc = (pipe >= 0 ? t.substring(pipe + 1) : '').trim();
+            name = name.replace(/（.*?）$/g, '').trim();
+            desc = desc.replace(/（.*?）$/g, '').trim();
+            // 无分隔时，整段当 name；模糊名补种类
+            if (!desc) desc = name;
+            name = EStore.clarifyGarmentName(label, name, desc);
+            return { name, desc: desc !== name ? desc : '', slotLabel: label };
         };
-        const pushItem = (zone, text) => {
-            if (!zone || text == null) return;
+        const pushItem = (id, label, text) => {
+            if (!id || text == null) return;
             const t = String(text).replace(/^-\s*/, '').trim();
             if (!t) return;
-            result[zone].push(toItem(t));
+            result[id].push(toItem(t, label));
         };
         for (const line of lines) {
             const t = line.trim();
             if (!t || t.startsWith('【服装')) continue;
             const m = t.match(/^【(.+?)】\s*-?\s*(.*)$/);
             if (m) {
-                cz = getZone(m[1]) || cz;
+                const header = m[1].trim();
+                const id = EStore.matchOutfitSlotId(header);
+                if (id) {
+                    slotId = id;
+                    slotLabel = EStore.OUTFIT_SLOTS.find((s) => s.id === id)?.label || header;
+                }
                 const same = (m[2] || '').trim();
-                if (same) pushItem(cz || getZone(m[1]), same);
+                if (same && slotId) pushItem(slotId, slotLabel, same);
                 continue;
             }
-            if (t.startsWith('-')) pushItem(cz, t);
+            if (t.startsWith('-') && slotId) pushItem(slotId, slotLabel, t);
         }
         return EStore.normalizeOutfit(result);
     }
