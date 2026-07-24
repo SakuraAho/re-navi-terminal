@@ -182,6 +182,7 @@ export function clarifyGarmentName(slotLabel, name, desc) {
 /** 规范单槽：bare/pending/item/hair 都保留，禁止把「未穿着」丢成空数组 */
 export function normalizeOutfitSlot(item) {
     const st = outfitSlotState(item);
+    if (st.state === 'keep') return { name: '保持', desc: '', keep: true };
     if (st.state === 'bare') return { name: '未穿着', desc: '', bare: true };
     if (st.state === 'pending') return { name: '待确认', desc: '', pending: true };
     if (st.state === 'hair') return { name: st.name, desc: st.desc, hair: true };
@@ -228,7 +229,7 @@ export function normalizeOutfit(outfit) {
     return base;
 }
 
-/** 分区合并：patch 某槽有条目则覆盖该槽；否则保留 base */
+/** 分区合并：patch 为「保持」或空 → 保留 base；明确变更才覆盖 */
 export function mergeOutfit(baseOutfit, patchOutfit) {
     const b = normalizeOutfit(baseOutfit);
     const p = normalizeOutfit(patchOutfit);
@@ -236,9 +237,38 @@ export function mergeOutfit(baseOutfit, patchOutfit) {
     const out = emptyOutfit();
     OUTFIT_SLOTS.forEach((slot) => {
         const id = slot.id;
-        out[id] = p[id]?.length ? p[id] : (b[id] || []);
+        const patchArr = p[id] || [];
+        const baseArr = b[id] || [];
+        if (!patchArr.length) {
+            out[id] = baseArr;
+            return;
+        }
+        // 整槽都是「保持」→ 沿用旧
+        if (patchArr.every((it) => it.keep || it.name === '保持')) {
+            out[id] = baseArr.length ? baseArr : patchArr;
+            return;
+        }
+        // 过滤 keep 项后写入；若过滤后为空则沿用旧
+        const changed = patchArr.filter((it) => !it.keep && it.name !== '保持');
+        out[id] = changed.length ? changed : baseArr;
     });
     return out;
+}
+
+/** 把当前着装格式化成给 AI 的「已有状态」文本 */
+export function formatOutfitSnapshot(outfit) {
+    const o = normalizeOutfit(outfit || {});
+    return OUTFIT_SLOTS.map((slot) => {
+        const arr = o[slot.id] || [];
+        if (!arr.length) return `【${slot.label}】- 待确认`;
+        return arr.map((it) => {
+            const st = outfitSlotState(it);
+            if (st.state === 'bare') return `【${slot.label}】- 无`;
+            if (st.state === 'pending') return `【${slot.label}】- 待确认`;
+            if (st.state === 'hair' || slot.hair) return `【${slot.label}】- ${st.name}${st.desc && st.desc !== st.name ? ' | ' + st.desc : ''}`;
+            return `【${slot.label}】- ${st.name}${st.desc && st.desc !== st.name ? ' | ' + st.desc : ''}`;
+        }).join('\n');
+    }).join('\n');
 }
 
 /** 非空才写入；避免 AI 漏字段把旧档案刷成空白 */
@@ -358,6 +388,10 @@ export function outfitSlotState(item) {
     const desc = String(item.desc || '').trim();
     const raw = (name + ' ' + desc).trim();
     if (!raw) return { state: 'pending', name: '待确认', desc: '' };
+    // 刷新时「保持」= 客户端沿用旧值，不覆盖
+    if (raw === '保持' || raw === '不变' || raw === '无变更' || /^保持原/.test(raw)) {
+        return { state: 'keep', name: '保持', desc: '' };
+    }
     // 明确未穿着（世界书/正文写明无衣）
     if (raw === '无' || raw === '无。' || raw === '未穿着' || raw === '裸' || raw === '赤裸' || /^无衣|未着|一丝不挂|全裸$/.test(raw)) {
         return { state: 'bare', name: '未穿着', desc: '' };

@@ -45,7 +45,7 @@ export class EroLinksView {
         if (window.NaviTerm) window.NaviTerm.erolinksView = this;
         Bridge.ensurePromptDefaults('erolinks', {
             link: { enabled: true, name: 'EroLinks LINK', content: this._getDefaultLinkPrompt('[世界书内容]', '[聊天记录]'), order: 10 }
-        }, 8);
+        }, 9);
     }
 
     _esc(v) { return Bridge.escapeHtml(v); }
@@ -268,13 +268,14 @@ export class EroLinksView {
             const chatText = EStore.buildChatContext(ctx.chat || [], prefs.chatDepth || 5);
             const systemPrompt = this._resolveLinkPrompt(worldbookText, chatText, {
                 mode: this._linkMode,
-                targetName: inputName
+                targetName: inputName,
+                currentOutfit: this._linkedData?.outfit
             });
 
             const userHint = this._linkMode === 'status'
                 ? '请仅更新动态状态字段并按格式输出。'
                 : this._linkMode === 'outfit'
-                    ? '请仅更新服装相关字段并按格式输出。'
+                    ? '请仅根据正文中的着装变更做增量更新：未变更分区输出「- 保持」，变更分区才写新衣物或「- 无」。禁止重写未变更服装。'
                     : '请建立全量链接并按格式输出。';
 
             const result = await Bridge.callPhoneAI(
@@ -346,7 +347,16 @@ export class EroLinksView {
         if (mode === 'status') {
             extra.push('【本次范围】只更新可探测动态：活动、位置、好感、心率(纯数字)、体温(纯数字)、状态、湿润、快感、身体变化、心理所想(可察神情)。禁止对这些字段输出「未知」。秘密类可略。');
         } else if (mode === 'outfit') {
-            extra.push('【本次范围】只更新服装。【链接角色】正确。优先级：世界书着装→正文变更覆盖→无变更保持世界书→两边都无才待确认。正文「脱掉X」对应槽必须"- 无"。世界书写明日常全裸则各衣槽"- 无"。禁止无依据默认全裸，禁止"未提及"。');
+            const snap = EStore.formatOutfitSnapshot(this._linkedData?.outfit || opts.currentOutfit || {});
+            extra.push(`【本次范围·服装增量更新】
+【链接角色】必须正确。
+下面是角色【当前已记录着装】，正文没有明确变更的分区必须输出 "- 保持"，禁止重写、禁止换同义描述、禁止重新发挥。
+只有聊天/正文里明确发生的穿脱换，才输出新的 "- 短名称 | 描述" 或 "- 无"。
+禁止把未提及的分区改成待确认或重新编造衣物。
+
+【当前已记录着装】
+${snap || '（尚无记录）'}
+`);
         }
         return extra.length ? `${base}\n\n${extra.join('\n')}` : base;
     }
@@ -767,6 +777,9 @@ export class EroLinksView {
         let slotLabel = '';
         const toItem = (n, label) => {
             let t = String(n || '').replace(/^-\s*/, '').trim();
+            if (t === '保持' || t === '不变' || t === '无变更' || /^保持原/.test(t)) {
+                return { name: '保持', desc: '', keep: true, slotLabel: label };
+            }
             if (/^(已)?(脱掉|脱下|除去)/.test(t) || t === '无' || t === '未穿着') {
                 return { name: '未穿着', desc: '', bare: true, slotLabel: label };
             }
