@@ -1,111 +1,265 @@
-/* N.A.V.I. 体己师观测终端 - 观测委托视图 v3.2 */
+/* N.A.V.I. 观测委托视图 v4.0 — 委托板 */
 
-(function() {
+(function () {
     if (document.getElementById('navi-app-styles')) return;
     const link = document.createElement('link');
-    link.id = 'navi-app-styles'; link.rel = 'stylesheet';
-    link.href = new URL('./navi.css?v=3.2.0', import.meta.url).href;
+    link.id = 'navi-app-styles';
+    link.rel = 'stylesheet';
+    link.href = new URL('./navi.css?v=4.0.0', import.meta.url).href;
     document.head.appendChild(link);
 })();
 
 import Bridge from '../../bridge.js';
 import { NAVI_DEFAULTS } from './navi-prompts.js';
+import * as Store from './navi-store.js';
 
-const SITES = ['胸部', '胸部', '小穴', '小穴', '综合', '综合'];
-const SITE_ICONS = { '胸部': '🍈', '小穴': '🍑', '综合': '💗' };
+const SITE_ICONS = { 胸部: '🍈', 小穴: '🍑', 综合: '💗' };
 const DIFF_LABELS_OBS = ['简单', '中等', '困难'];
 const DIFF_LABELS_PLAY = ['轻度把玩', '沉浸把玩', '深度交互'];
-const DIFF_COLORS = { '简单': '#52c41a', '中等': '#faad14', '困难': '#ff4d4f', '轻度把玩': '#7c3aed', '沉浸把玩': '#db2777', '深度交互': '#dc2626' };
-const DIFF_ICONS = { '简单': '🟢', '中等': '🟡', '困难': '🔴', '轻度把玩': '💜', '沉浸把玩': '💗', '深度交互': '❤️' };
+const DIFF_COLORS = {
+    简单: '#52c41a', 中等: '#faad14', 困难: '#ff4d4f',
+    轻度把玩: '#7c3aed', 沉浸把玩: '#db2777', 深度交互: '#dc2626'
+};
+const DIFF_ICONS = {
+    简单: '🟢', 中等: '🟡', 困难: '🔴',
+    轻度把玩: '💜', 沉浸把玩: '💗', 深度交互: '❤️'
+};
 
 export class NaviView {
     constructor(app) {
         this.app = app;
-        this.currentView = 'mode'; // mode | options | detail | settings
-        this.mode = '';  // 'observation' | 'play'
-        this.selectedIdx = -1;
-        this._generating = null;
-        this._commissions = [];
+        this.currentView = 'home'; // home | options | detail | settings | export
+        this.mode = '';
+        this.selectedId = null;
+        this.boardFilter = 'all'; // all | unused | active | starred | used
+        this._generating = null; // difficulty string or 'reroll:'+id
+        this._board = Store.loadBoard();
         this._lastRaw = '';
+        this._exportId = null;
         if (window.NaviTerm) window.NaviTerm.naviView = this;
     }
 
     _esc(v) { return Bridge.escapeHtml(v); }
+    _opt(key) { return Bridge.termGetString('navi_opt_' + key, ''); }
+    _setOpt(key, val) { Bridge.termSet('navi_opt_' + key, String(val || ''), true); }
+    _optBool(key) { return Bridge.termGetBool('navi_opt_' + key, false); }
+    _getSupplement() { return Bridge.termGetString('navi_supplement', ''); }
+    _wbEnabled() { return Bridge.getWorldbookEnabled('navi', true); }
+
+    _reloadBoard() { this._board = Store.loadBoard(); return this._board; }
+    _find(id) { return this._board.find((x) => x.id === id) || null; }
+    _active() { return this._board.find((x) => x.status === 'active') || null; }
+
+    _saveOptTextsFromDom() {
+        ['action', 'items', 'assist', 'target'].forEach((key) => {
+            if (!this._optBool(key)) return;
+            const ta = document.getElementById('navi-opt-' + key + '-text');
+            if (ta) this._setOpt(key + '_text', ta.value);
+        });
+    }
+
+    _captureOpts() {
+        this._saveOptTextsFromDom();
+        return Store.snapshotOpts((k) => this._optBool(k), (k) => this._opt(k));
+    }
 
     render() {
         let html;
         if (this.currentView === 'settings') html = this._renderSettings();
-        else if (this.currentView === 'detail' && this._commissions[this.selectedIdx]) html = this._renderDetail();
+        else if (this.currentView === 'export' && this._find(this._exportId)) html = this._renderExport();
+        else if (this.currentView === 'detail' && this._find(this.selectedId)) html = this._renderDetail();
         else if (this.currentView === 'options' && this.mode) html = this._renderOptions();
-        else html = this._renderModeSelect();
+        else {
+            this.currentView = 'home';
+            html = this._renderHome();
+        }
         this.app.phoneShell.setContent(html, 'navi-' + this.currentView);
         if (this.currentView === 'settings') this._bindSettings();
+        if (this.currentView === 'home') this._bindHome();
+        if (this.currentView === 'options') this._bindOptions();
     }
 
     // === 导航 ===
-    selectMode(m) { this.mode = m; this.currentView = 'options'; this.render(); }
-    goBack() { this.currentView = this.mode ? 'options' : 'mode'; this.render(); }
-    goHome() { this.currentView = 'mode'; this.render(); }
+    goHome() { this.currentView = 'home'; this.mode = ''; this.render(); }
     goSettings() { this.currentView = 'settings'; this.render(); }
-    viewDetail(idx) { this.selectedIdx = idx; this.currentView = 'detail'; this.render(); }
+    goBack() {
+        if (this.currentView === 'export') { this.currentView = 'detail'; this.render(); return; }
+        if (this.currentView === 'detail') { this.currentView = 'home'; this.render(); return; }
+        if (this.currentView === 'options') { this.currentView = 'home'; this.mode = ''; this.render(); return; }
+        if (this.currentView === 'settings') { this.currentView = 'home'; this.render(); return; }
+        this.goHome();
+    }
+    selectMode(m) { this.mode = m; this.currentView = 'options'; this.render(); }
+    viewDetail(id) { this.selectedId = id; this.currentView = 'detail'; this.render(); }
+    openExport(id) { this._exportId = id; this.currentView = 'export'; this.render(); }
 
-    // === 选项读写（经 bridge，手机 storage + localStorage 双写） ===
-    _opt(key) { return Bridge.termGetString('navi_opt_' + key, ''); }
-    _setOpt(key, val) { Bridge.termSet('navi_opt_' + key, String(val || ''), true); }
-    _optBool(key) { return Bridge.termGetBool('navi_opt_' + key, false); }
-
-    // === 模式选择 ===
-    _renderModeSelect() {
-        return `<div class="navi-app"><div class="navi-bar">
-            <div class="navi-bar-btn" onclick="window.NaviTerm.naviView.goSettings()">⚙️</div>
-        </div><div class="navi-scroll"><div class="navi-section">
-            <div class="navi-section-title">📡 选择委托模式</div>
-            <div class="navi-mode-cards">
-                <div class="navi-mode-card" onclick="window.NaviTerm.naviView.selectMode('observation')">
-                    <div class="navi-mode-icon">🔍</div>
-                    <div class="navi-mode-name">观测模式</div>
-                    <div class="navi-mode-desc">以观察乳房和小穴的形态变化为目标<br>不主动干预肉体，通过姿态、环境、对比等方式观测</div>
-                </div>
-                <div class="navi-mode-card" onclick="window.NaviTerm.naviView.selectMode('play')">
-                    <div class="navi-mode-icon">✋</div>
-                    <div class="navi-mode-name">把玩模式</div>
-                    <div class="navi-mode-desc">主动对乳房和小穴进行物理把玩<br>支持手法、姿态、物品辅助、协助人员等</div>
-                </div>
-            </div>
-        </div></div></div>`;
+    quickStart() {
+        const cfg = Store.loadLastCfg();
+        if (cfg?.mode) {
+            this.mode = cfg.mode === 'play' ? 'play' : 'observation';
+            if (cfg.opts) {
+                ['action', 'items', 'assist', 'target'].forEach((k) => {
+                    this._setOpt(k, cfg.opts[k] ? 'true' : 'false');
+                    this._setOpt(k + '_text', cfg.opts[k + '_text'] || '');
+                });
+            }
+            if (cfg.count) Store.setGenCount(cfg.count);
+            this.currentView = 'options';
+            this.render();
+            return;
+        }
+        this.app.phoneShell?.showNotification?.('暂无上次配置', '请先选择模式生成一次', 'ℹ️');
     }
 
-    // === 选项面板 + 难度按钮 ===
+    setFilter(f) { this.boardFilter = f; this.render(); }
+
+    // ========== 首页：委托板 ==========
+    _renderHome() {
+        this._reloadBoard();
+        const active = this._active();
+        const last = Store.loadLastCfg();
+        const lastLabel = last?.mode
+            ? `${last.mode === 'play' ? '把玩' : '观测'} · ${last.difficulty || '—'} · ${last.count || 3}条`
+            : '尚无记录';
+        const filtered = this._filteredBoard();
+
+        return `<div class="navi-app"><div class="navi-bar">
+            <div class="navi-bar-title">🎯 观测委托</div>
+            <div class="navi-bar-btn" onclick="window.NaviTerm.naviView.goSettings()">⚙️</div>
+        </div><div class="navi-scroll">
+
+            <div class="navi-section">
+                <div class="navi-quick" onclick="window.NaviTerm.naviView.quickStart()">
+                    <div class="navi-quick-main">⚡ 继续上次配置</div>
+                    <div class="navi-quick-sub">${this._esc(lastLabel)}</div>
+                </div>
+                <div class="navi-mode-row">
+                    <div class="navi-mode-card compact" onclick="window.NaviTerm.naviView.selectMode('observation')">
+                        <div class="navi-mode-icon">🔍</div>
+                        <div class="navi-mode-name">观测</div>
+                    </div>
+                    <div class="navi-mode-card compact" onclick="window.NaviTerm.naviView.selectMode('play')">
+                        <div class="navi-mode-icon">✋</div>
+                        <div class="navi-mode-name">把玩</div>
+                    </div>
+                </div>
+            </div>
+
+            ${active ? `<div class="navi-section">
+                <div class="navi-section-title">进行中</div>
+                ${this._renderCard(active, true)}
+            </div>` : ''}
+
+            <div class="navi-section">
+                <div class="navi-section-head">
+                    <div class="navi-section-title" style="margin:0">委托板 (${filtered.length}/${this._board.length})</div>
+                    <div class="navi-bar-btn" onclick="window.NaviTerm.naviView.clearUnused()">清空未用</div>
+                </div>
+                <div class="navi-filter-row">
+                    ${[['all', '全部'], ['unused', '未用'], ['active', '进行中'], ['starred', '收藏'], ['used', '已用']].map(([k, lab]) =>
+                        `<button class="navi-filter-btn${this.boardFilter === k ? ' on' : ''}" data-f="${k}">${lab}</button>`
+                    ).join('')}
+                </div>
+                ${filtered.length
+                    ? filtered.map((c) => this._renderCard(c, false)).join('')
+                    : '<div class="navi-empty">暂无委托。选择上方模式开始生成。</div>'}
+            </div>
+        </div></div>`;
+    }
+
+    _bindHome() {
+        const root = this.app.phoneShell.screen;
+        root?.querySelectorAll('.navi-filter-btn').forEach((btn) => {
+            btn.addEventListener('click', () => this.setFilter(btn.dataset.f));
+        });
+    }
+
+    _filteredBoard() {
+        const f = this.boardFilter;
+        if (f === 'all') return this._board;
+        return this._board.filter((x) => x.status === f);
+    }
+
+    _renderCard(c, emphasize) {
+        const clr = DIFF_COLORS[c.difficulty] || '#8c8c8c';
+        const modeIcon = c.mode === 'play' ? '✋' : '🔍';
+        const tagHtml = c.mode === 'observation'
+            ? (c.site ? `<span class="navi-site-tag">${SITE_ICONS[c.site] || '💗'} ${this._esc(c.site)}</span>` : '')
+            : (c.playTag ? `<span class="navi-site-tag">🏷 ${this._esc(c.playTag)}</span>` : '');
+        const optTags = Store.formatOptTags(c.opts || {});
+        const stClr = Store.statusColor(c.status);
+        return `<div class="navi-card${emphasize ? ' navi-card-active' : ''}${c.status === 'used' ? ' navi-card-used' : ''}" onclick="window.NaviTerm.naviView.viewDetail('${c.id}')" style="border-left:3px solid ${clr}">
+            <div class="navi-card-header">
+                <span class="navi-st-dot" style="background:${stClr}" title="${Store.statusLabel(c.status)}"></span>
+                <span class="navi-diff-tag" style="background:${clr};color:#fff">${modeIcon} ${this._esc(c.difficulty)}</span>
+                ${tagHtml}
+                ${c.incomplete ? '<span class="navi-site-tag warn">不完整</span>' : ''}
+                <button class="navi-copy-btn" onclick="event.stopPropagation();window.NaviTerm.naviView.openExport('${c.id}')">导出</button>
+            </div>
+            <div class="navi-card-target">🎯 ${this._esc(c.target)}</div>
+            <div class="navi-card-indicator">${this._esc((c.indicator || '').substring(0, 90))}${(c.indicator || '').length > 90 ? '…' : ''}</div>
+            ${optTags.length ? `<div class="navi-opt-tags">${optTags.map((t) => `<span class="navi-opt-tag">${this._esc(t)}</span>`).join('')}</div>` : ''}
+            <div class="navi-card-meta"><span>💰 ${this._esc(c.reward)}</span><span class="navi-st-label" style="color:${stClr}">${Store.statusLabel(c.status)}</span></div>
+        </div>`;
+    }
+
+    clearUnused() {
+        if (!confirm('清空所有「未用」委托？收藏/进行中/已用会保留。')) return;
+        this._board = Store.clearByFilter(this._board, (x) => x.status === 'unused');
+        this.app.phoneShell?.showNotification?.('已清空未用', '', '✅');
+        this.render();
+    }
+
+    // ========== 生成配置页 ==========
     _renderOptions() {
         const modeName = this.mode === 'observation' ? '🔍 观测模式' : '✋ 把玩模式';
         const diffLabels = this.mode === 'observation' ? DIFF_LABELS_OBS : DIFF_LABELS_PLAY;
+        const count = Store.getGenCount();
+        const busy = !!this._generating;
+
         return `<div class="navi-app"><div class="navi-bar">
+            <div class="navi-bar-btn" onclick="window.NaviTerm.naviView.goBack()" style="margin-right:auto">← 返回</div>
             <div class="navi-bar-btn" onclick="window.NaviTerm.naviView.goSettings()">⚙️</div>
         </div><div class="navi-scroll">
-            <div class="navi-section" style="display:flex;align-items:center;gap:8px;padding-bottom:0;">
-                <div class="navi-bar-btn" onclick="window.NaviTerm.naviView.goHome()" style="margin-right:0;">← 切换模式</div>
-            </div>
             <div class="navi-section">
                 <div class="navi-section-title">${modeName}</div>
-                ${this._renderOptToggle('action', '🏃 动作指示', '指定目标的身体姿态或动作（如弯腰、四足着地、跳跃等），留空则由AI随机生成')}
-                ${this._renderOptToggle('items', '🧴 辅助物品', '指定辅助物品（如羽毛、精油、冰块、丝带、软刷等），留空则由AI随机生成')}
-                ${this._renderOptToggle('assist', '👥 协助人员', '指定协助人员（如目标自己、另一位少女等），留空则由AI随机生成')}
-                ${this._renderOptToggle('target', '🎯 对象指定', '指定目标角色名（如：美咲）。留空则由AI从世界书随机选择一名角色，统一为全部6个委托的目标')}
+                ${this._renderOptToggle('action', '🏃 动作指示', '指定姿态/动作；留空则 AI 为每条设计不同动作')}
+                ${this._renderOptToggle('items', '🧴 辅助物品', '指定道具；留空则 AI 为每条设计不同道具')}
+                ${this._renderOptToggle('assist', '👥 协助人员', '如「目标自己」或另一角色；留空则 AI 设计')}
+                ${this._renderOptToggle('target', '🎯 对象指定', '固定角色名；留空则从世界书/自行生成统一目标')}
             </div>
             <div class="navi-section">
-                <div class="navi-section-title">📊 选择难度</div>
+                <div class="navi-section-title">生成条数（追加到委托板，不覆盖）</div>
+                <div class="navi-count-row">
+                    ${[1, 3, 6].map((n) =>
+                        `<button class="navi-count-btn${count === n ? ' on' : ''}" data-n="${n}" ${busy ? 'disabled' : ''}>${n} 条</button>`
+                    ).join('')}
+                </div>
+            </div>
+            <div class="navi-section">
+                <div class="navi-section-title">选择难度生成</div>
                 <div class="navi-diff-buttons">
-                    ${diffLabels.map(d => {
+                    ${diffLabels.map((d) => {
                         const loading = this._generating === d;
                         return `<button class="navi-diff-btn" style="border-color:${DIFF_COLORS[d]};color:${DIFF_COLORS[d]}"
-                            onclick="window.NaviTerm.naviView.generate('${d}')" ${loading ? 'disabled' : ''}>
+                            onclick="window.NaviTerm.naviView.generate('${d}')" ${busy ? 'disabled' : ''}>
                             ${DIFF_ICONS[d]} ${loading ? '⏳' : d}
                         </button>`;
                     }).join('')}
                 </div>
+                <div class="navi-hint">生成成功后会追加进委托板，可随时从首页查看/导出。</div>
             </div>
-            ${this._commissions.length > 0 ? this._renderResults() : ''}
         </div></div>`;
+    }
+
+    _bindOptions() {
+        const root = this.app.phoneShell.screen;
+        root?.querySelectorAll('.navi-count-btn').forEach((btn) => {
+            btn.addEventListener('click', () => {
+                Store.setGenCount(parseInt(btn.dataset.n, 10));
+                this.render();
+            });
+        });
     }
 
     _renderOptToggle(key, label, hint) {
@@ -114,16 +268,15 @@ export class NaviView {
         return `<div class="navi-opt-block">
             <div class="navi-opt-header">
                 <span>${label}</span>
-                <label class="toggle-switch" style="flex:0 0 auto;">
-                    <input type="checkbox" id="navi-opt-${key}" ${enabled ? 'checked' : ''}
+                <label class="toggle-switch" style="flex:0 0 auto">
+                    <input type="checkbox" ${enabled ? 'checked' : ''}
                         onchange="window.NaviTerm.naviView._toggleOpt('${key}', this.checked)">
                     <span class="toggle-slider"></span>
                 </label>
             </div>
             ${enabled ? `<div class="navi-opt-body">
-                <textarea id="navi-opt-${key}-text" class="navi-opt-textarea"
-                    placeholder="${hint}">${this._esc(text)}</textarea>
-                <div class="navi-opt-hint">${hint}</div>
+                <textarea id="navi-opt-${key}-text" class="navi-opt-textarea" placeholder="${this._esc(hint)}">${this._esc(text)}</textarea>
+                <div class="navi-opt-hint">${this._esc(hint)}</div>
             </div>` : ''}
         </div>`;
     }
@@ -134,184 +287,357 @@ export class NaviView {
         this.render();
     }
 
-    // === 生成 ===
+    // ========== 生成 / 重 roll ==========
     async generate(difficulty) {
         if (this._generating) return;
-        // 保存所有textarea内容
-        ['action', 'items', 'assist', 'target'].forEach(key => {
-            if (this._optBool(key)) {
-                const ta = document.getElementById('navi-opt-' + key + '-text');
-                if (ta) this._setOpt(key + '_text', ta.value);
-            }
-        });
-
+        const count = Store.getGenCount();
+        const opts = this._captureOpts();
+        Store.saveLastCfg({ mode: this.mode, difficulty, count, opts, at: Date.now() });
         this._generating = difficulty;
-        this._commissions = [];
         this.render();
-
         try {
-            if (!Bridge.isCoreReady()) {
-                const st = Bridge.describeReadiness();
-                throw new Error(st.message || '手机桥接未就绪');
-            }
-            const context = Bridge.getSTContext();
-            const feature = this.mode === 'observation' ? 'observation' : 'play';
-            let basePrompt = Bridge.getTermPrompt('navi', feature, NAVI_DEFAULTS[feature]?.content || '');
-            if (!basePrompt) throw new Error('提示词为空');
-
-            const buildHint = (key, label, mainWord, desc) => {
-                if (!this._optBool(key)) return '';
-                const text = this._opt(key + '_text').trim();
-                if (text) {
-                    return `【强制要求 - ${label}】以下指定的${label}必须作为全部6个委托的${mainWord}。每个委托的观测指标都要切实体现，${desc}：\n${text}\n【强制要求结束】`;
-                }
-                return `【强制要求 - ${label}】你必须为全部6个委托各自原创设计${mainWord}。每个委托的${mainWord}要具体、多样、互不重复。这是硬性要求，不是可选项。\n【强制要求结束】`;
-            };
-
-            const buildTargetHint = () => {
-                if (!this._optBool('target')) return '';
-                const text = this._opt('target_text').trim();
-                if (text) {
-                    return `【强制要求 - 对象指定】全部6个委托的目标固定为【${text}】。世界书有则提取其种族/年龄/胸穴，无则自行设定，6个委托中该角色的信息保持完全一致。需要生成6种不同的委托方式，互不重复。\n【强制要求结束】`;
-                }
-                return '【强制要求 - 对象指定】从世界书中随机选择一名角色（无世界书则自行创建一名），作为全部6个委托的统一目标。该角色的种族/年龄/胸穴信息在6个委托中保持完全一致，但委托方式需6种各不相同。\n【强制要求结束】';
-            };
-
-            const buildConstraints = () => {
-                const items = [];
-                const targetName = this._optBool('target') ? this._opt('target_text').trim() : '';
-                const assistName = this._optBool('assist') ? this._opt('assist_text').trim() : '';
-                const isSelf = assistName && targetName && assistName === targetName;
-                if (this._optBool('target')) {
-                    items.push(targetName ?
-                        `对象指定：全部6个委托目标固定为【${targetName}】，同一角色6种不同委托方式${isSelf?'（目标同时担任协助者，需主动执行观测动作）':''}。` :
-                        '对象指定：从世界书随机选一名角色作为全部6个委托的统一目标。');
-                }
-                if (this._optBool('action')) {
-                    const t = this._opt('action_text').trim();
-                    items.push(t ?
-                        `动作指示：主要姿势固定为"${t}"。` :
-                        '动作指示：为每个委托设计不同的主要姿势。');
-                }
-                if (this._optBool('items')) {
-                    const t = this._opt('items_text').trim();
-                    items.push(t ?
-                        `辅助物品：核心交互工具固定为"${t}"，必须出现在每个委托中并实际参与互动。` :
-                        '辅助物品：为每个委托指定不同的核心交互工具，必须实际参与互动。');
-                }
-                if (this._optBool('assist')) {
-                    items.push(assistName ?
-                        `协助人员：协助者为"${assistName}"${isSelf||assistName.includes('目标自己')||assistName.includes('自身')?'（由目标主动执行全部观测动作，体己师转为辅助与观测角色）':''}。` :
-                        '协助人员：为每个委托指定不同的协助者。');
-                }
-                if (!items.length) return '';
-                return '⚠️ 当前生效的强制约束（以下规则优先级最高，必须全部遵守）：\n' + items.map((s,i) => (i+1)+'. '+s).join('\n');
-            };
-
-            const story = Bridge.getStoryTimeParts();
-            const worldbookText = Bridge.getWorldbookEnabled('navi', true)
-                ? await Bridge.buildWorldbookText('navi')
-                : '';
-
-            const systemPrompt = basePrompt
-                .replace(/\{\{STORY_TIME\}\}/g, story.time || '')
-                .replace(/\{\{STORY_DATE\}\}/g, story.date || '')
-                .replace(/\{\{DIFFICULTY\}\}/g, difficulty)
-                .replace(/\{\{SUPPLEMENT\}\}/g, this._getSupplement())
-                .replace(/\{\{WORLDBOOK\}\}/g, worldbookText || '无')
-                .replace(/\{\{ACTION_HINT\}\}/g, buildHint('action', '动作指示', '主要姿势', '具体描述该姿势如何影响乳房和小穴的形态变化'))
-                .replace(/\{\{ITEMS_HINT\}\}/g, (()=>{if(!this._optBool('items'))return'';const t=this._opt('items_text').trim();if(t)return`【强制要求 - 辅助物品】以下道具必须出现在全部6个委托中，并作为核心交互工具被实际使用。每个委托的观测指标必须具体描写该道具参与互动的过程和效果：\n${t}\n【强制要求结束】`;return'【强制要求 - 辅助物品】你必须为全部6个委托各自指定一个核心交互工具。每个委托的工具必须不同，且必须在观测指标中具体描写该工具实际参与互动的过程和效果。这是硬性要求，不是可选项。\n【强制要求结束】';})())
-                .replace(/\{\{ASSIST_HINT\}\}/g, (()=>{const h=buildHint('assist','协助人员','协助人员及互动方式','具体描述该人员如何参与互动及对观测的贡献');if(!h)return'';const t=this._opt('assist_text').trim();if(t&&(t.includes('目标自己')||t.includes('自身')||t.includes('本人')))return h.replace('【强制要求结束】','若协助人员为【目标自己】，则全部委托必须由目标主动执行观测动作（如自己用手扒开小穴、自行摆出姿势、自慰展示、用自己的手揉捏乳房等），体己师转为辅助与观测角色，不主导交互。\n【强制要求结束】');return h;})())
-                .replace(/\{\{TARGET_HINT\}\}/g, buildTargetHint())
-                .replace(/\{\{CONSTRAINTS\}\}/g, buildConstraints());
-
-            const result = await Bridge.callPhoneAI([
-                { role: 'system', content: systemPrompt },
-                { role: 'user', content: this.mode === 'observation' ? `请生成6个${difficulty}难度的观测委托。` : `请生成6个${difficulty}的把玩委托。` }
-            ], { appId: 'navi', max_tokens: context?.max_response_length || 4096 });
-
-            if (!result?.success) throw new Error(result?.error || 'AI请求失败');
-            this._lastRaw = String(result.summary || '');
-            this._commissions = this._parse(this._lastRaw);
-            if (!this._commissions.length) {
-                throw new Error('未能解析出委托（可在设置外查看控制台原文）。请重试或检查提示词格式约束。');
-            }
+            const items = await this._runGenerate({
+                mode: this.mode,
+                difficulty,
+                count,
+                opts
+            });
+            this._board = Store.appendItems(this._board, items);
+            this.app.phoneShell?.showNotification?.(
+                `已追加 ${items.length} 条`,
+                items.some((x) => x.incomplete) ? '部分解析不完整' : '',
+                '✅'
+            );
+            this.currentView = 'home';
+            this.boardFilter = 'unused';
+            this.mode = '';
         } catch (err) {
-            console.error('[NAVI][generate]', err, this._lastRaw ? { rawPreview: this._lastRaw.slice(0, 500) } : '');
+            console.error('[NAVI][generate]', err, this._lastRaw ? { raw: this._lastRaw.slice(0, 600) } : '');
             this.app.phoneShell?.showNotification?.('生成失败', err.message, '❌');
         }
         this._generating = null;
         this.render();
     }
 
-    // === 结果列表 ===
-    _renderResults() {
-        let html = '<div class="navi-section"><div class="navi-section-title">📋 结果 (' + this._commissions.length + ')</div>';
-        this._commissions.forEach((c, i) => {
-            const clr = DIFF_COLORS[c.difficulty] || '#8c8c8c';
-            const site = SITES[i] || '综合';
-            const tagHtml = this.mode === 'observation'
-                ? `<span class="navi-site-tag">${SITE_ICONS[site]} ${site}</span>`
-                : (c.playTag ? `<span class="navi-site-tag">🏷 ${this._esc(c.playTag)}</span>` : '');
-            html += `<div class="navi-card" onclick="window.NaviTerm.naviView.viewDetail(${i})" style="border-left:3px solid ${clr}">
-                <div class="navi-card-header">
-                    <span class="navi-diff-tag" style="background:${clr};color:#fff">${this._esc(c.difficulty)}</span>
-                    ${tagHtml}
-                    <button class="navi-copy-btn" onclick="event.stopPropagation();window.NaviTerm.naviView.copyToChat(${i})">📋</button>
-                </div>
-                <div class="navi-card-target">🎯 ${this._esc(c.target)}</div>
-                <div class="navi-card-indicator">${this._esc(c.indicator || '').substring(0, 100)}${(c.indicator||'').length > 100 ? '...' : ''}</div>
-                <div class="navi-card-reward">💰 ${this._esc(c.reward)}</div>
-            </div>`;
-        });
-        html += '</div>';
-        return html;
+    async reroll(id) {
+        if (this._generating) return;
+        const old = this._find(id);
+        if (!old) return;
+        this._generating = 'reroll:' + id;
+        this.render();
+        try {
+            const items = await this._runGenerate({
+                mode: old.mode,
+                difficulty: old.difficulty,
+                count: 1,
+                opts: old.opts || {}
+            });
+            if (!items.length) throw new Error('重 roll 未得到有效委托');
+            const neu = { ...items[0], id: old.id, status: old.status, createdAt: old.createdAt };
+            this._board = Store.updateItem(this._board, old.id, neu);
+            this.app.phoneShell?.showNotification?.('已重新生成该条', '', '✅');
+        } catch (err) {
+            console.error('[NAVI][reroll]', err);
+            this.app.phoneShell?.showNotification?.('重 roll 失败', err.message, '❌');
+        }
+        this._generating = null;
+        this.render();
     }
 
-    // === 详情 ===
+    async _runGenerate({ mode, difficulty, count, opts }) {
+        if (!Bridge.isCoreReady()) {
+            throw new Error(Bridge.describeReadiness().message || '手机桥接未就绪');
+        }
+        const context = Bridge.getSTContext();
+        const feature = mode === 'play' ? 'play' : 'observation';
+        let basePrompt = Bridge.getTermPrompt('navi', feature, NAVI_DEFAULTS[feature]?.content || '');
+        if (!basePrompt) throw new Error('提示词为空');
+
+        const n = count === 1 || count === 6 ? count : 3;
+        const optGet = (k) => !!opts?.[k];
+        const optText = (k) => String(opts?.[k + '_text'] || '').trim();
+
+        const buildHint = (key, label, mainWord, desc) => {
+            if (!optGet(key)) return '';
+            const text = optText(key);
+            if (text) {
+                return `【强制要求 - ${label}】以下指定的${label}必须作为全部${n}个委托的${mainWord}。每个委托都要切实体现，${desc}：\n${text}\n【强制要求结束】`;
+            }
+            return `【强制要求 - ${label}】你必须为全部${n}个委托各自原创设计${mainWord}。每个委托的${mainWord}要具体、多样、互不重复。\n【强制要求结束】`;
+        };
+
+        const buildTargetHint = () => {
+            if (!optGet('target')) return '';
+            const text = optText('target');
+            if (text) {
+                return `【强制要求 - 对象指定】全部${n}个委托的目标固定为【${text}】。世界书有则提取其种族/年龄/胸穴，无则自行设定，信息保持一致。需要生成${n}种不同的委托方式。\n【强制要求结束】`;
+            }
+            return `【强制要求 - 对象指定】从世界书随机选一名角色（无则自创）作为全部${n}个委托的统一目标，信息一致，方式各不相同。\n【强制要求结束】`;
+        };
+
+        const buildConstraints = () => {
+            const items = [];
+            const targetName = optGet('target') ? optText('target') : '';
+            const assistName = optGet('assist') ? optText('assist') : '';
+            const isSelf = assistName && targetName && assistName === targetName;
+            if (optGet('target')) {
+                items.push(targetName
+                    ? `对象指定：全部${n}个委托目标固定为【${targetName}】${isSelf ? '（目标同时担任协助者，需主动执行）' : ''}。`
+                    : `对象指定：统一目标，${n}种不同委托方式。`);
+            }
+            if (optGet('action')) {
+                const t = optText('action');
+                items.push(t ? `动作指示：主要姿势固定为"${t}"。` : '动作指示：为每个委托设计不同主要姿势。');
+            }
+            if (optGet('items')) {
+                const t = optText('items');
+                items.push(t
+                    ? `辅助物品：核心交互工具固定为"${t}"，必须出现在每个委托中并实际参与互动。`
+                    : '辅助物品：为每个委托指定不同核心交互工具并实际参与互动。');
+            }
+            if (optGet('assist')) {
+                items.push(assistName
+                    ? `协助人员：协助者为"${assistName}"${isSelf || /目标自己|自身|本人/.test(assistName) ? '（目标主动执行，体己师辅助观测）' : ''}。`
+                    : '协助人员：为每个委托指定不同协助者。');
+            }
+            if (!items.length) return '';
+            return '⚠️ 当前生效的强制约束（优先级最高）：\n' + items.map((s, i) => (i + 1) + '. ' + s).join('\n');
+        };
+
+        const story = Bridge.getStoryTimeParts();
+        const worldbookText = Bridge.getWorldbookEnabled('navi', true)
+            ? await Bridge.buildWorldbookText('navi')
+            : '';
+
+        // 动态替换提示词中的固定「6」为条数
+        let systemPrompt = basePrompt
+            .replace(/\{\{COUNT\}\}/g, String(n))
+            .replace(/恰好6个/g, `恰好${n}个`)
+            .replace(/全部6个/g, `全部${n}个`)
+            .replace(/生成6个/g, `生成${n}个`)
+            .replace(/6个委托/g, `${n}个委托`)
+            .replace(/6种/g, `${n}种`)
+            .replace(/\{\{STORY_TIME\}\}/g, story.time || '')
+            .replace(/\{\{STORY_DATE\}\}/g, story.date || '')
+            .replace(/\{\{DIFFICULTY\}\}/g, difficulty)
+            .replace(/\{\{SUPPLEMENT\}\}/g, this._getSupplement())
+            .replace(/\{\{WORLDBOOK\}\}/g, worldbookText || '无')
+            .replace(/\{\{ACTION_HINT\}\}/g, buildHint('action', '动作指示', '主要姿势', '具体描述该姿势如何影响形态'))
+            .replace(/\{\{ITEMS_HINT\}\}/g, (() => {
+                if (!optGet('items')) return '';
+                const t = optText('items');
+                if (t) {
+                    return `【强制要求 - 辅助物品】道具必须出现在全部${n}个委托中并作为核心交互工具被实际使用：\n${t}\n【强制要求结束】`;
+                }
+                return `【强制要求 - 辅助物品】为全部${n}个委托各自指定不同核心交互工具，并在指标中具体描写使用过程。\n【强制要求结束】`;
+            })())
+            .replace(/\{\{ASSIST_HINT\}\}/g, (() => {
+                const h = buildHint('assist', '协助人员', '协助人员及互动方式', '描述如何参与');
+                if (!h) return '';
+                const t = optText('assist');
+                if (t && /目标自己|自身|本人/.test(t)) {
+                    return h.replace('【强制要求结束】', '若协助为【目标自己】，须由目标主动执行观测/交互动作，体己师辅助。\n【强制要求结束】');
+                }
+                return h;
+            })())
+            .replace(/\{\{TARGET_HINT\}\}/g, buildTargetHint())
+            .replace(/\{\{CONSTRAINTS\}\}/g, buildConstraints());
+
+        // 观测部位配比：随条数调整，不再写死 2+2+2
+        if (feature === 'observation') {
+            const siteRule = n === 1
+                ? '本批仅1个委托，观测部位从胸部/小穴/综合中任选其一写清。'
+                : n === 3
+                    ? '3个委托观测部位建议：1胸部、1小穴、1综合（可微调但尽量覆盖）。'
+                    : '6个委托严格顺序：前2胸部、中2小穴、后2综合。';
+            systemPrompt = systemPrompt.replace(
+                /6个委托严格顺序：前2个只观测胸部，中间2个只观测小穴，后2个同时观测。/g,
+                siteRule
+            );
+        }
+
+        const userMsg = feature === 'observation'
+            ? `请生成恰好${n}个${difficulty}难度的观测委托。`
+            : `请生成恰好${n}个${difficulty}的把玩委托。`;
+
+        const result = await Bridge.callPhoneAI(
+            [
+                { role: 'system', content: systemPrompt },
+                { role: 'user', content: userMsg }
+            ],
+            { appId: 'navi', max_tokens: context?.max_response_length || 4096 }
+        );
+        if (!result?.success) throw new Error(result?.error || 'AI请求失败');
+        this._lastRaw = String(result.summary || '');
+        let parsed = this._parse(this._lastRaw, n);
+        if (!parsed.length) throw new Error('未能解析出委托。可打开控制台查看原文后重试。');
+
+        const incomplete = parsed.length < n;
+        parsed = parsed.map((c, i) => Store.normalizeItem({
+            ...c,
+            id: Store.uid(),
+            mode,
+            difficulty: c.difficulty && c.difficulty !== '未知' ? c.difficulty : difficulty,
+            site: c.site || (feature === 'observation' ? this._defaultSite(i, n) : ''),
+            status: 'unused',
+            opts: { ...opts },
+            createdAt: Date.now(),
+            incomplete: incomplete && i === parsed.length - 1 ? true : incomplete
+        }));
+        // 标记批次不完整
+        if (incomplete) parsed = parsed.map((c) => ({ ...c, incomplete: true }));
+        return parsed;
+    }
+
+    _defaultSite(i, n) {
+        if (n === 1) return '综合';
+        if (n === 3) return ['胸部', '小穴', '综合'][i] || '综合';
+        if (i < 2) return '胸部';
+        if (i < 4) return '小穴';
+        return '综合';
+    }
+
+    // ========== 详情 ==========
     _renderDetail() {
-        const c = this._commissions[this.selectedIdx];
+        const c = this._find(this.selectedId);
         if (!c) return '';
         const clr = DIFF_COLORS[c.difficulty] || '#8c8c8c';
-        const site = SITES[this.selectedIdx] || '综合';
-        const detailTag = this.mode === 'observation'
-            ? `<span class="navi-site-tag large">${SITE_ICONS[site]} ${site}</span>`
+        const busy = this._generating === 'reroll:' + c.id;
+        const tagHtml = c.mode === 'observation'
+            ? (c.site ? `<span class="navi-site-tag large">${SITE_ICONS[c.site] || '💗'} ${this._esc(c.site)}</span>` : '')
             : (c.playTag ? `<span class="navi-site-tag large">🏷 ${this._esc(c.playTag)}</span>` : '');
+        const optTags = Store.formatOptTags(c.opts || {});
+        const indicatorLabel = c.mode === 'play' ? '交互要点' : '观测指标';
+
         return `<div class="navi-app"><div class="navi-bar">
-            <div class="navi-bar-btn" onclick="window.NaviTerm.naviView.goBack()" style="margin-right:auto;">← 返回</div>
-            <div class="navi-bar-btn" onclick="window.NaviTerm.naviView.copyToChat(${this.selectedIdx})">📋 发送</div>
+            <div class="navi-bar-btn" onclick="window.NaviTerm.naviView.goBack()" style="margin-right:auto">← 返回</div>
+            <div class="navi-bar-btn" onclick="window.NaviTerm.naviView.openExport('${c.id}')">导出</div>
         </div><div class="navi-scroll"><div class="navi-detail">
             <div class="navi-detail-header">
                 <span class="navi-diff-tag large" style="background:${clr};color:#fff">${this._esc(c.difficulty)}</span>
-                ${detailTag}
+                ${tagHtml}
+                <span class="navi-st-label" style="color:${Store.statusColor(c.status)}">${Store.statusLabel(c.status)}</span>
             </div>
+            ${optTags.length ? `<div class="navi-opt-tags" style="margin-bottom:10px">${optTags.map((t) => `<span class="navi-opt-tag">${this._esc(t)}</span>`).join('')}</div>` : ''}
             <div class="navi-detail-field"><div class="navi-detail-label">🎯 任务目标</div><div class="navi-detail-value">${this._esc(c.target)}</div></div>
-            <div class="navi-detail-field"><div class="navi-detail-label">📋 观测指标</div><div class="navi-detail-value">${this._esc(c.indicator)}</div></div>
-            <div class="navi-detail-field"><div class="navi-detail-label">📊 预估难度</div><div class="navi-detail-value" style="color:${clr}">${this._esc(c.difficulty)}</div></div>
+            <div class="navi-detail-field"><div class="navi-detail-label">📋 ${indicatorLabel}</div><div class="navi-detail-value">${this._esc(c.indicator)}</div></div>
             <div class="navi-detail-field"><div class="navi-detail-label">⏰ 委托时限</div><div class="navi-detail-value">${this._esc(c.deadline || '无')}</div></div>
             <div class="navi-detail-field"><div class="navi-detail-label">💰 预计报酬</div><div class="navi-detail-value reward">${this._esc(c.reward)}</div></div>
+
+            <div class="navi-action-grid">
+                <button class="navi-act" onclick="window.NaviTerm.naviView.setItemStatus('${c.id}','active')">▶ 接取</button>
+                <button class="navi-act" onclick="window.NaviTerm.naviView.setItemStatus('${c.id}','starred')">★ 收藏</button>
+                <button class="navi-act" onclick="window.NaviTerm.naviView.setItemStatus('${c.id}','used')">✓ 已用</button>
+                <button class="navi-act" onclick="window.NaviTerm.naviView.setItemStatus('${c.id}','unused')">↺ 未用</button>
+                <button class="navi-act" onclick="window.NaviTerm.naviView.reroll('${c.id}')" ${busy ? 'disabled' : ''}>${busy ? '⏳' : '🎲'} 重roll</button>
+                <button class="navi-act danger" onclick="window.NaviTerm.naviView.deleteItem('${c.id}')">🗑 删除</button>
+            </div>
+            <div class="navi-hint">接取后会出现在首页「进行中」；导出可选多种模板写入酒馆输入框。</div>
         </div></div></div>`;
     }
 
-    copyToChat(idx) {
-        const c = this._commissions[idx];
-        if (!c) return;
-        const site = SITES[idx] || '综合';
-        const modeLabel = this.mode === 'observation' ? ` - ${site}` : '';
-        const t = `【观测委托 - ${c.difficulty}${modeLabel}】
+    setItemStatus(id, status) {
+        this._board = Store.setStatus(this._board, id, status);
+        this.app.phoneShell?.showNotification?.(Store.statusLabel(status), '', '✅');
+        this.render();
+    }
+
+    deleteItem(id) {
+        if (!confirm('删除这条委托？')) return;
+        this._board = Store.removeItem(this._board, id);
+        this.currentView = 'home';
+        this.app.phoneShell?.showNotification?.('已删除', '', '✅');
+        this.render();
+    }
+
+    // ========== 导出 ==========
+    _renderExport() {
+        const c = this._find(this._exportId);
+        if (!c) return '';
+        return `<div class="navi-app"><div class="navi-bar">
+            <div class="navi-bar-btn" onclick="window.NaviTerm.naviView.goBack()" style="margin-right:auto">← 返回</div>
+        </div><div class="navi-scroll"><div class="navi-section">
+            <div class="navi-section-title">导出到酒馆输入框</div>
+            <div class="navi-export-list">
+                <button class="navi-export-btn" onclick="window.NaviTerm.naviView.exportToChat('${c.id}','system')">📡 系统下发<br><span>N.A.V.I. 订单口吻</span></button>
+                <button class="navi-export-btn" onclick="window.NaviTerm.naviView.exportToChat('${c.id}','accept')">▶ 接单行动<br><span>{{user}} 前往执行的简述</span></button>
+                <button class="navi-export-btn" onclick="window.NaviTerm.naviView.exportToChat('${c.id}','focus')">📋 仅指标<br><span>本轮剧情焦点，精简</span></button>
+                <button class="navi-export-btn" onclick="window.NaviTerm.naviView.exportToChat('${c.id}','full')">📄 完整卡片<br><span>目标+指标+时限+报酬</span></button>
+                <button class="navi-export-btn" onclick="window.NaviTerm.naviView.copyClipboard('${c.id}')">📑 复制剪贴板<br><span>不写入输入框</span></button>
+            </div>
+            <label class="navi-check-row"><input type="checkbox" id="navi-export-mark-active" checked> 导出后标记为「进行中」</label>
+        </div></div></div>`;
+    }
+
+    _buildExportText(c, type) {
+        const modeName = c.mode === 'play' ? '把玩' : '观测';
+        const site = c.site ? ` · ${c.site}` : (c.playTag ? ` · ${c.playTag}` : '');
+        if (type === 'system') {
+            return `【N.A.V.I. 观测委托 · ${modeName}${site}】
+系统向体己师下发一条${c.difficulty}委托。
+目标：${c.target || ''}
+要求：${c.indicator || ''}
+时限：${c.deadline || '无'}　报酬：${c.reward || ''}
+（可自由接取或无视）`;
+        }
+        if (type === 'accept') {
+            return `（接取 N.A.V.I. ${modeName}委托 · ${c.difficulty}${site}）
+目标：${c.target || ''}
+我按照委托要求行动：${c.indicator || ''}`;
+        }
+        if (type === 'focus') {
+            return `【本轮焦点 · ${modeName}委托】
+${c.target || ''}
+${c.indicator || ''}`;
+        }
+        // full
+        return `【观测委托 - ${c.difficulty}${site}】
 🎯 任务目标：${c.target || ''}
-📋 观测指标：${c.indicator || ''}
+📋 ${c.mode === 'play' ? '交互要点' : '观测指标'}：${c.indicator || ''}
 📊 预估难度：${c.difficulty || ''}
 ⏰ 委托时限：${c.deadline || '无'}
 💰 预计报酬：${c.reward || ''}`;
-        if (!Bridge.appendToChatInput(t)) {
-            this.app.phoneShell?.showNotification?.('发送失败', '未找到酒馆输入框', '❌');
-            return;
-        }
-        this.app.phoneShell?.showNotification?.('已写入输入框', '', '✅');
     }
 
-    // === 设置 ===
+    exportToChat(id, type) {
+        const c = this._find(id);
+        if (!c) return;
+        const text = this._buildExportText(c, type);
+        if (!Bridge.appendToChatInput(text)) {
+            this.app.phoneShell?.showNotification?.('写入失败', '未找到酒馆输入框', '❌');
+            return;
+        }
+        const mark = document.getElementById('navi-export-mark-active');
+        if (!mark || mark.checked) {
+            this._board = Store.setStatus(this._board, id, 'active');
+        }
+        this.app.phoneShell?.showNotification?.('已写入输入框', '', '✅');
+        this.currentView = 'detail';
+        this.selectedId = id;
+        this.render();
+    }
+
+    async copyClipboard(id) {
+        const c = this._find(id);
+        if (!c) return;
+        const text = this._buildExportText(c, 'full');
+        try {
+            if (navigator.clipboard?.writeText) await navigator.clipboard.writeText(text);
+            else {
+                const ta = document.createElement('textarea');
+                ta.value = text;
+                document.body.appendChild(ta);
+                ta.select();
+                document.execCommand('copy');
+                ta.remove();
+            }
+            this.app.phoneShell?.showNotification?.('已复制', '', '✅');
+        } catch (e) {
+            this.app.phoneShell?.showNotification?.('复制失败', e.message, '❌');
+        }
+    }
+
+    // ========== 设置（沿用） ==========
     _renderSettings() {
         const promptObs = Bridge.getTermPrompt('navi', 'observation', NAVI_DEFAULTS.observation?.content || '');
         const promptPlay = Bridge.getTermPrompt('navi', 'play', NAVI_DEFAULTS.play?.content || '');
@@ -319,14 +645,19 @@ export class NaviView {
         const bridgeStatus = Bridge.describeReadiness();
 
         return `<div class="navi-app"><div class="navi-bar">
-            <div class="navi-bar-btn" onclick="window.NaviTerm.naviView.goBack()" style="margin-right:auto;">← 返回</div>
+            <div class="navi-bar-btn" onclick="window.NaviTerm.naviView.goBack()" style="margin-right:auto">← 返回</div>
         </div><div class="navi-scroll"><div class="navi-settings-body">
-
             <div class="navi-s-section">
                 <div class="navi-s-section-title">🔌 桥接状态</div>
                 <div class="navi-s-desc" style="color:${bridgeStatus.level === 'ok' ? '#52c41a' : bridgeStatus.level === 'warn' ? '#faad14' : '#ff4d4f'}">${this._esc(bridgeStatus.message)}</div>
             </div>
-
+            <div class="navi-s-section">
+                <div class="navi-s-section-title">🗂 委托板</div>
+                <div class="navi-s-desc">当前 ${this._board.length} / ${Store.MAX_BOARD} 条。超出时丢弃最旧记录。</div>
+                <div class="navi-s-btn-row">
+                    <button class="navi-s-btn navi-s-btn-warn" id="navi-clear-all">清空全部委托</button>
+                </div>
+            </div>
             <div class="navi-s-section">
                 <div class="navi-s-section-title">🔍 观测模式提示词</div>
                 <textarea id="navi-s-prompt-obs" class="navi-s-textarea">${this._esc(promptObs)}</textarea>
@@ -335,7 +666,6 @@ export class NaviView {
                     <button class="navi-s-btn navi-s-btn-primary" data-save="observation">保存</button>
                 </div>
             </div>
-
             <div class="navi-s-section">
                 <div class="navi-s-section-title">✋ 把玩模式提示词</div>
                 <textarea id="navi-s-prompt-play" class="navi-s-textarea">${this._esc(promptPlay)}</textarea>
@@ -344,26 +674,23 @@ export class NaviView {
                     <button class="navi-s-btn navi-s-btn-primary" data-save="play">保存</button>
                 </div>
             </div>
-
             <div class="navi-s-section">
                 <div class="navi-s-section-title">📝 设定补全</div>
-                <div class="navi-s-desc">补充种族特征、特殊设定等，生成时自动注入。</div>
-                <textarea id="navi-s-supplement" class="navi-s-textarea" style="min-height:100px;">${this._esc(supp)}</textarea>
+                <div class="navi-s-desc">种族特征、特殊设定等，生成时注入。</div>
+                <textarea id="navi-s-supplement" class="navi-s-textarea" style="min-height:100px">${this._esc(supp)}</textarea>
                 <div class="navi-s-btn-row">
                     <button class="navi-s-btn navi-s-btn-primary" id="navi-s-supplement-save">保存设定补全</button>
                 </div>
             </div>
-
             <div class="navi-s-section">
                 <div class="navi-s-row"><span>📚 注入世界书</span>
-                    <label class="toggle-switch" style="flex:0 0 auto;"><input type="checkbox" id="navi-use-worldbook" ${this._wbEnabled()?'checked':''}><span class="toggle-slider"></span></label>
+                    <label class="toggle-switch" style="flex:0 0 auto"><input type="checkbox" id="navi-use-worldbook" ${this._wbEnabled() ? 'checked' : ''}><span class="toggle-slider"></span></label>
                 </div>
-                <div class="nt-fold navi-worldbook-fold" data-default-open="false" style="margin-top:10px;">
-                    <div class="nt-fold-header"><div class="nt-fold-main"><div class="nt-fold-title">世界书选择</div><div class="nt-fold-desc">展开后勾选要注入的酒馆世界书</div></div><span class="nt-fold-arrow">›</span></div>
+                <div class="nt-fold" data-default-open="false" style="margin-top:10px">
+                    <div class="nt-fold-header"><div class="nt-fold-main"><div class="nt-fold-title">世界书选择</div><div class="nt-fold-desc">勾选注入的酒馆世界书</div></div><span class="nt-fold-arrow">›</span></div>
                     <div class="nt-fold-content"><div id="navi-worldbook-list"></div></div>
                 </div>
             </div>
-
         </div></div></div>`;
     }
 
@@ -371,7 +698,13 @@ export class NaviView {
         const root = this.app.phoneShell.screen;
         if (!root) return;
 
-        root.querySelectorAll('[data-save]').forEach(btn => {
+        root.querySelector('#navi-clear-all')?.addEventListener('click', () => {
+            if (!confirm('清空委托板全部记录？')) return;
+            this._board = Store.saveBoard([]);
+            this.app.phoneShell?.showNotification?.('已清空', '', '✅');
+        });
+
+        root.querySelectorAll('[data-save]').forEach((btn) => {
             btn.addEventListener('click', () => {
                 const feature = btn.dataset.save;
                 const ta = root.querySelector('#navi-s-prompt-' + (feature === 'observation' ? 'obs' : 'play'));
@@ -379,11 +712,13 @@ export class NaviView {
                 try {
                     Bridge.setTermPrompt('navi', feature, ta.value, { customized: true });
                     this.app.phoneShell?.showNotification?.('已保存', '', '✅');
-                } catch (e) { this.app.phoneShell?.showNotification?.('保存失败', e.message, '❌'); }
+                } catch (e) {
+                    this.app.phoneShell?.showNotification?.('保存失败', e.message, '❌');
+                }
             });
         });
 
-        root.querySelectorAll('[data-reset]').forEach(btn => {
+        root.querySelectorAll('[data-reset]').forEach((btn) => {
             btn.addEventListener('click', () => {
                 if (!confirm('恢复默认提示词？')) return;
                 const feature = btn.dataset.reset;
@@ -398,8 +733,7 @@ export class NaviView {
         });
 
         root.querySelector('#navi-s-supplement-save')?.addEventListener('click', () => {
-            const val = root.querySelector('#navi-s-supplement')?.value || '';
-            Bridge.termSet('navi_supplement', val, true);
+            Bridge.termSet('navi_supplement', root.querySelector('#navi-s-supplement')?.value || '', true);
             this.app.phoneShell?.showNotification?.('已保存', '', '✅');
         });
 
@@ -410,7 +744,7 @@ export class NaviView {
         });
         if (wbToggle?.checked) this._renderWBList();
 
-        root.querySelectorAll('.nt-fold').forEach(fold => {
+        root.querySelectorAll('.nt-fold').forEach((fold) => {
             if (fold.dataset.foldInited === '1') return;
             fold.dataset.foldInited = '1';
             fold.classList.toggle('is-open', String(fold.dataset.defaultOpen || '').toLowerCase() === 'true');
@@ -418,44 +752,41 @@ export class NaviView {
         });
     }
 
-    _getSupplement() { return Bridge.termGetString('navi_supplement', ''); }
-    _wbEnabled() { return Bridge.getWorldbookEnabled('navi', true); }
-
     async _renderWBList() {
         const container = document.getElementById('navi-worldbook-list');
         const mgr = Bridge.getWorldbookManager();
         if (!container) return;
         if (!mgr?.listAvailableWorldbooks) {
-            container.innerHTML = '<div style="font-size:11px;color:#888;padding:6px 0;">世界书桥接不可用</div>';
+            container.innerHTML = '<div style="font-size:11px;color:#888;padding:6px 0">世界书桥接不可用</div>';
             return;
         }
         try {
             const sources = await mgr.listAvailableWorldbooks({ includeEntries: true, force: true });
             const sel = mgr.getSelectionState?.('navi') || { initialized: false, ids: [] };
             if (!sources?.length) {
-                container.innerHTML = '<div style="font-size:11px;color:#888;padding:6px 0;">未读取到世界书列表</div>';
+                container.innerHTML = '<div style="font-size:11px;color:#888;padding:6px 0">未读取到世界书列表</div>';
                 return;
             }
-            container.innerHTML = sources.map(s => {
+            container.innerHTML = sources.map((s) => {
                 const checked = sel.initialized && mgr.matchesSelection?.(s, sel.ids) ? 'checked' : '';
                 return `<label class="navi-wb-item"><input type="checkbox" class="navi-wb-cb" value="${this._esc(s.id)}" ${checked}><span class="navi-wb-name">${this._esc(s.name)}</span></label>`;
             }).join('');
-            container.querySelectorAll('.navi-wb-cb').forEach(cb => {
+            container.querySelectorAll('.navi-wb-cb').forEach((cb) => {
                 cb.addEventListener('change', () => {
                     const ids = [];
-                    container.querySelectorAll('.navi-wb-cb').forEach(c => { if (c.checked) ids.push(c.value); });
+                    container.querySelectorAll('.navi-wb-cb').forEach((c) => { if (c.checked) ids.push(c.value); });
                     try { mgr.setSelection?.('navi', ids); } catch (e) {
                         this.app.phoneShell?.showNotification?.('世界书选择失败', e.message, '❌');
                     }
                 });
             });
-        } catch (e) {
-            container.innerHTML = '<div style="font-size:11px;color:#d93025;padding:6px 0;">世界书读取失败</div>';
+        } catch (_) {
+            container.innerHTML = '<div style="font-size:11px;color:#d93025;padding:6px 0">世界书读取失败</div>';
         }
     }
 
-    // === 解析 ===
-    _parse(content) {
+    // ========== 解析 ==========
+    _parse(content, maxN = 6) {
         let text = String(content || '')
             .replace(/```[\s\S]*?```/g, (block) => block.replace(/```\w*\n?/g, '').replace(/```/g, ''))
             .replace(/```/g, '');
@@ -463,7 +794,6 @@ export class NaviView {
             || text.match(/<委托列表>([\s\S]*)$/i);
         const inner = m ? m[1] : text;
 
-        // 兼容 ---委托N--- / 【委托N】 / 委托N：
         let blocks = inner.split(/---\s*委托\s*\d+\s*---/);
         if (blocks.length <= 1) blocks = inner.split(/【\s*委托\s*\d+\s*】/);
         if (blocks.length <= 1) blocks = inner.split(/(?:^|\n)\s*委托\s*\d+\s*[：:.\)]\s*/);
@@ -471,16 +801,11 @@ export class NaviView {
 
         for (const block of blocks) {
             if (!block.trim()) continue;
-
             const c = { target: '', indicator: '', playTag: '', difficulty: '未知', deadline: '无', reward: '未知', site: '' };
             let inIndicator = false;
-            const lines = block.split('\n');
-
-            for (const line of lines) {
+            for (const line of block.split('\n')) {
                 const trimmed = line.trim();
                 if (!trimmed) { if (inIndicator) c.indicator += '\n'; continue; }
-
-                // 观测指标续行中若遇到新字段，结束指标
                 const kvMatch = trimmed.match(/^([^\s：:]{1,12})[：:]\s*(.*)/);
                 if (kvMatch) {
                     const key = kvMatch[1].trim();
@@ -500,13 +825,11 @@ export class NaviView {
                 }
                 if (inIndicator) c.indicator += '\n' + trimmed;
             }
-
             if (c.target && (c.indicator || '').trim().length >= 3) {
                 c.indicator = c.indicator.trim();
                 commissions.push(c);
             }
         }
-
-        return commissions.slice(0, 6);
+        return commissions.slice(0, maxN);
     }
 }
