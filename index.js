@@ -5,7 +5,7 @@
 
 import Bridge from './bridge.js';
 
-const TERM_VERSION = '2.3.4';
+const TERM_VERSION = '2.3.5';
 const TERM_BASE = new URL('./', import.meta.url).href;
 
 if (window.NAVI_TERM_LOADED) {
