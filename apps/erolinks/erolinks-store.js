@@ -195,3 +195,54 @@ export function formatStatusExport(d) {
     ].filter(Boolean);
     return lines.join('\n');
 }
+
+/* —— 催眠会话 —— */
+export const HYPNO_KEY = 'navi_erolinks_hypno_v1';
+
+export function loadHypnoSession() {
+    const raw = safeParse(Bridge.termGet(HYPNO_KEY, null), null);
+    if (!raw || !raw.active) return null;
+    return {
+        active: true,
+        charName: String(raw.charName || ''),
+        mode: String(raw.mode || ''),
+        modeName: String(raw.modeName || ''),
+        draft: String(raw.draft || ''),
+        startedAt: Number(raw.startedAt) || Date.now()
+    };
+}
+
+export function saveHypnoSession(session) {
+    if (!session || !session.active) {
+        Bridge.termSet(HYPNO_KEY, JSON.stringify({ active: false }), true);
+        return null;
+    }
+    const s = {
+        active: true,
+        charName: String(session.charName || ''),
+        mode: String(session.mode || ''),
+        modeName: String(session.modeName || ''),
+        draft: String(session.draft || ''),
+        startedAt: Number(session.startedAt) || Date.now()
+    };
+    Bridge.termSet(HYPNO_KEY, JSON.stringify(s), true);
+    return s;
+}
+
+export function clearHypnoSession() {
+    return saveHypnoSession(null);
+}
+
+/** 服装槽展示态：bare | item | pending */
+export function outfitSlotState(item) {
+    if (!item) return { state: 'pending', name: '待确认', desc: '' };
+    const name = String(item.name || item || '').trim();
+    const desc = String(item.desc || '').trim();
+    const raw = (name + ' ' + desc).trim();
+    if (!raw || raw === '无' || raw === '无。') return { state: 'bare', name: '未穿着', desc: '' };
+    if (/未提及|待确认|未知|不明/.test(raw)) return { state: 'pending', name: '待确认', desc: '' };
+    if (/发型|头发|发色|发尾|长发|短发|马尾|双马尾/.test(raw) && !/饰|夹|绳|带|帽/.test(raw)) {
+        return { state: 'hair', name: name || '发型', desc: desc || name };
+    }
+    return { state: 'item', name: name || '衣物', desc: desc && desc !== name ? desc : '' };
+}
