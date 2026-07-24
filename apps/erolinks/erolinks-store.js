@@ -233,16 +233,59 @@ export function clearHypnoSession() {
     return saveHypnoSession(null);
 }
 
-/** 服装槽展示态：bare | item | pending */
+/** 服装槽展示态：bare | item | pending | hair */
 export function outfitSlotState(item) {
-    if (!item) return { state: 'pending', name: '待确认', desc: '' };
+    // 空槽默认未穿着（全裸世界观优先），不是待确认
+    if (!item) return { state: 'bare', name: '未穿着', desc: '' };
     const name = String(item.name || item || '').trim();
     const desc = String(item.desc || '').trim();
     const raw = (name + ' ' + desc).trim();
-    if (!raw || raw === '无' || raw === '无。') return { state: 'bare', name: '未穿着', desc: '' };
-    if (/未提及|待确认|未知|不明/.test(raw)) return { state: 'pending', name: '待确认', desc: '' };
-    if (/发型|头发|发色|发尾|长发|短发|马尾|双马尾/.test(raw) && !/饰|夹|绳|带|帽/.test(raw)) {
+    if (!raw || raw === '无' || raw === '无。' || raw === '未穿着' || raw === '裸' || raw === '赤裸') {
+        return { state: 'bare', name: '未穿着', desc: '' };
+    }
+    if (/^待确认$|未提及|不明|看不清|无法确认/.test(raw)) {
+        return { state: 'pending', name: '待确认', desc: '' };
+    }
+    if (/发型|头发|发色|发尾|长发|短发|马尾|双马尾|卷发|直发/.test(raw) && !/饰|夹|绳|箍|帽|发卡|发带/.test(raw)) {
         return { state: 'hair', name: name || '发型', desc: desc || name };
     }
     return { state: 'item', name: name || '衣物', desc: desc && desc !== name ? desc : '' };
+}
+
+/** 心率/体温：只保留数字（可含小数） */
+export function digitsOnly(val, fallback = '') {
+    const s = String(val ?? '').trim();
+    if (!s || s === '未知' || s === '—') return fallback;
+    const m = s.match(/-?\d+(?:\.\d+)?/);
+    return m ? m[0] : fallback;
+}
+
+/** 可探测字段：禁止展示「未知」时的回退 */
+export function probeableFallback(field, val) {
+    const v = String(val ?? '').trim();
+    if (v && v !== '未知' && v !== '—' && v !== '不明') {
+        if (field === 'heartRate') return digitsOnly(v, '72');
+        if (field === 'temp') return digitsOnly(v, '36.5');
+        return v;
+    }
+    const fb = {
+        race: '人类',
+        age: '—',
+        role: '岛民',
+        affiliation: '—',
+        activity: '日常活动中',
+        location: '琉夏岛',
+        favorability: '普通',
+        heartRate: '72',
+        temp: '36.5',
+        mood: '平静',
+        breast: '可见，细节随场景',
+        vulva: '可见，细节随场景',
+        sensitive: '常规敏感',
+        wetness: '常态',
+        arousal: '平静无波',
+        bodyChange: '无显著变化',
+        thought: '（神情平静）'
+    };
+    return fb[field] != null ? fb[field] : '—';
 }

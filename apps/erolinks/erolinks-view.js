@@ -45,7 +45,7 @@ export class EroLinksView {
         if (window.NaviTerm) window.NaviTerm.erolinksView = this;
         Bridge.ensurePromptDefaults('erolinks', {
             link: { enabled: true, name: 'EroLinks LINK', content: this._getDefaultLinkPrompt('[世界书内容]', '[聊天记录]'), order: 10 }
-        }, 3);
+        }, 5);
     }
 
     _esc(v) { return Bridge.escapeHtml(v); }
@@ -282,16 +282,18 @@ export class EroLinksView {
 
             const text = String(result.summary || '');
             this._lastRaw = text;
-            const parsed = this._parseLinkResult(text);
+            let parsed = this._parseLinkResult(text);
             if (inputName && (!parsed.charName || parsed.charName === '角色')) {
                 parsed.charName = inputName;
             }
+            parsed = this._normalizeProbeable(parsed);
 
             const prev = EStore.getProfile(parsed.charName) || this._linkedData;
             const mergeMode = this._linkMode === 'status' || this._linkMode === 'outfit'
                 ? this._linkMode
                 : 'full';
             this._linkedData = EStore.mergeProfiles(prev, parsed, mergeMode);
+            this._linkedData = this._normalizeProbeable(this._linkedData);
             EStore.upsertProfile(this._linkedData);
             this._saveConfirmed();
             this._prefs = EStore.savePrefs({ lastTargetName: this._linkedData.charName || '' });
@@ -336,19 +338,73 @@ export class EroLinksView {
             extra.push('【认人】从聊天记录中识别主要角色；多人时优先最近发言或被点名者。');
         }
         if (mode === 'status') {
-            extra.push('【本次范围】只更新动态状态：当前活动、所在位置、好感度、心率、体温、当前状态、湿润状态、快感阶段、当前欲望、幻想内容、身体变化、心理所想。其余字段可沿用未知或简写。服装可省略或写无。');
+            extra.push('【本次范围】只更新可探测动态：活动、位置、好感、心率(纯数字)、体温(纯数字)、状态、湿润、快感、身体变化、心理所想(可察神情)。禁止对这些字段输出「未知」。秘密类可略。');
         } else if (mode === 'outfit') {
-            extra.push('【本次范围】只更新服装穿着各分区。基础信息与动态状态尽量简短或填未知，但【链接角色】必须正确。');
+            extra.push('【本次范围】只更新服装各分区。【链接角色】必须正确。服装规则：世界书优先（全裸设定则各槽输出"- 无"表示未穿着）；正文有明确更衣才写衣物名；仅当正文暗示有衣但看不清时才写"- 待确认"。禁止对空槽写未提及。');
         }
         return extra.length ? `${base}\n\n${extra.join('\n')}` : base;
     }
 
+    _normalizeProbeable(d) {
+        const p = { ...(d || {}) };
+        const fields = [
+            'race', 'age', 'role', 'affiliation', 'activity', 'location', 'favorability',
+            'heartRate', 'temp', 'mood', 'breast', 'vulva', 'sensitive', 'wetness',
+            'arousal', 'bodyChange', 'thought'
+        ];
+        fields.forEach((f) => {
+            p[f] = EStore.probeableFallback(f, p[f]);
+        });
+        p.heartRate = EStore.digitsOnly(p.heartRate, '72');
+        p.temp = EStore.digitsOnly(p.temp, '36.5');
+        // 服装：空分区保持空数组，展示层按未穿着；把「无」规范掉
+        if (p.outfit && typeof p.outfit === 'object') {
+            const o = { ...EStore.emptyOutfit(), ...p.outfit };
+            Object.keys(o).forEach((z) => {
+                const arr = Array.isArray(o[z]) ? o[z] : [];
+                o[z] = arr
+                    .map((it) => {
+                        const st = EStore.outfitSlotState(it);
+                        if (st.state === 'bare') return null;
+                        if (st.state === 'pending') return { name: '待确认', desc: '' };
+                        if (st.state === 'hair') return { name: st.name, desc: st.desc, hair: true };
+                        return { name: st.name, desc: st.desc };
+                    })
+                    .filter(Boolean);
+            });
+            p.outfit = o;
+        }
+        return p;
+    }
+
     _getDefaultLinkPrompt(worldbookText, chatText) {
-        return `你是EroLinks身心链接模块。根据聊天记录链接一名角色并输出状态。
+        return `你是EroLinks链接模块。根据世界书与聊天记录输出角色可探测状态。
 
-世界书：仅当存在与【链接角色】同名的条目时，才用其补全基础信息；否则忽略世界书中其他角色数据，勿张冠李戴。不确定的隐私字段填"未知"，禁止编造。
+【世界书优先】
+1. 先根据世界书（含岛国设定与角色条目）确定默认状态。
+2. 再看聊天/正文是否有明确变更；有变更以正文为准。
+3. 无变更则保持世界书默认（例如日常全裸→服装各槽为未穿着）。
+4. 仅同名角色条目可用于该角色基础信息；勿把其他角色数据套用过来。
 
-输出格式（每个字段独占一行）：
+【可探测字段——禁止输出「未知」】
+种族、年龄、身份、所属、当前活动、所在位置、好感度、当前状态、胸部、小穴、敏感部位、湿润状态、快感阶段、身体变化、心理所想：
+必须给出可展示的具体值；正文不足时按场景与常识推断短句，禁止写未知/未提及。
+
+【心率】【体温】
+只输出纯数字（心率如72，体温如36.5），禁止任何文字、单位、括号说明。
+
+【秘密字段——可以未知】
+性经验、最近性行为、自慰频率、最近自慰、生理周期、当前欲望、幻想内容、秘密嗜好：
+无可靠依据时填「未知」或「未询问」，禁止编造隐私史。
+
+【服装——三态】
+每个分区只能是其一：
+- 未穿着：输出 "- 无"
+- 有衣物：输出 "- 短名称 | 描述"
+- 待确认：仅当正文暗示该位有衣但看不清时，输出 "- 待确认"
+规则：世界书默认全裸则无正文更衣证据时全部 "- 无"。禁止输出「未提及」。发型单独写在【发型】，不是可脱衣物。
+
+输出格式（每字段独占一行）：
 【链接角色】值
 【种族】值
 【年龄】值
@@ -357,38 +413,38 @@ export class EroLinksView {
 【当前活动】值
 【所在位置】值
 【好感度】值
-【心率】值
-【体温】值
+【心率】72
+【体温】36.5
 【当前状态】值
 【胸部】值
 【小穴】值
-【性经验】值
-【最近性行为】值
-【自慰频率】值
-【最近自慰】值
+【性经验】未知
+【最近性行为】未知
+【自慰频率】未知
+【最近自慰】未知
 【敏感部位】值
 【湿润状态】值
 【快感阶段】值
-【生理周期】值
-【当前欲望】值
-【幻想内容】值
-【秘密嗜好】值
+【生理周期】未知
+【当前欲望】未知
+【幻想内容】未知
+【秘密嗜好】未知
 【身体变化】值
 【心理所想】值
-【服装穿着】每件衣物单独一行："- 短名称 | 描述"；无则"- 无"
-【帽子】- …
-【发型】- …
-【发饰】- …
-【脖子】- …
-【外套】- …
-【内衬】- …
-【胸罩】- …
-【手套】- …
-【裙子/裤子】- …
-【内裤】- …
-【袜子】- …
-【鞋子】- …
-【装饰】- …
+【服装穿着】
+【帽子】- 无
+【发型】- 描述或无
+【发饰】- 无
+【脖子】- 无
+【外套】- 无
+【内衬】- 无
+【胸罩】- 无
+【手套】- 无
+【裙子/裤子】- 无
+【内裤】- 无
+【袜子】- 无
+【鞋子】- 无
+【装饰】- 无
 
 世界书：${worldbookText || '无'}
 聊天记录：${chatText || '无'}`;
@@ -516,8 +572,14 @@ export class EroLinksView {
         }
     }
 
+    _pv(d, field) {
+        return EStore.probeableFallback(field, d?.[field]);
+    }
+
     _renderInfoTab(d) {
-        return `<div class="el-info-scroll"><div class="el-avatar-area"><div class="el-avatar-ring"><div class="el-avatar-inner">${this._esc(d.charName).charAt(0)}</div></div><div class="el-char-name">${this._esc(d.charName)}</div></div><div class="el-info-grid"><div class="el-info-item"><span class="el-info-label">种族</span><span class="el-info-val">${this._esc(d.race || '—')}</span></div><div class="el-info-item"><span class="el-info-label">年龄</span><span class="el-info-val">${this._esc(d.age || '—')}</span></div><div class="el-info-item"><span class="el-info-label">身份</span><span class="el-info-val">${this._esc(d.role || '—')}</span></div><div class="el-info-item"><span class="el-info-label">所属</span><span class="el-info-val">${this._esc(d.affiliation || '—')}</span></div></div><div style="display:flex;gap:6px;margin-bottom:8px;"><div class="el-heartrate-card" style="flex:1;"><div class="el-hr-icon">💓</div><div class="el-hr-value">${this._esc(d.heartRate || '72')}</div><div class="el-hr-unit">BPM</div><div class="el-hr-wave"></div></div><div class="el-heartrate-card" style="flex:1;border-color:rgba(255,140,60,0.15);background:rgba(255,140,60,0.06);"><div class="el-hr-icon" style="color:#ff8c40;">🌡</div><div class="el-hr-value" style="color:#ff8c40;">${this._esc(d.temp || '36.5')}</div><div class="el-hr-unit">°C</div></div></div><div class="el-info-grid"><div class="el-info-item"><span class="el-info-label">状态</span><span class="el-info-val">${this._esc(d.mood || '—')}</span></div><div class="el-info-item"><span class="el-info-label">活动</span><span class="el-info-val">${this._esc(d.activity || '—')}</span></div><div class="el-info-item"><span class="el-info-label">位置</span><span class="el-info-val">${this._esc(d.location || '—')}</span></div><div class="el-info-item"><span class="el-info-label">好感</span><span class="el-info-val">${this._esc(d.favorability || '—')}</span></div></div>${d.thought ? `<div class="el-thought"><div class="el-thought-label">💭</div><div class="el-thought-text">${this._esc(d.thought)}</div></div>` : ''}</div>`;
+        const hr = EStore.digitsOnly(d.heartRate, '72');
+        const tp = EStore.digitsOnly(d.temp, '36.5');
+        return `<div class="el-info-scroll"><div class="el-avatar-area"><div class="el-avatar-ring"><div class="el-avatar-inner">${this._esc(d.charName).charAt(0)}</div></div><div class="el-char-name">${this._esc(d.charName)}</div></div><div class="el-info-grid"><div class="el-info-item"><span class="el-info-label">种族</span><span class="el-info-val">${this._esc(this._pv(d, 'race'))}</span></div><div class="el-info-item"><span class="el-info-label">年龄</span><span class="el-info-val">${this._esc(this._pv(d, 'age'))}</span></div><div class="el-info-item"><span class="el-info-label">身份</span><span class="el-info-val">${this._esc(this._pv(d, 'role'))}</span></div><div class="el-info-item"><span class="el-info-label">所属</span><span class="el-info-val">${this._esc(this._pv(d, 'affiliation'))}</span></div></div><div style="display:flex;gap:6px;margin-bottom:8px;"><div class="el-heartrate-card" style="flex:1;"><div class="el-hr-icon">💓</div><div class="el-hr-value">${this._esc(hr)}</div><div class="el-hr-unit">BPM</div><div class="el-hr-wave"></div></div><div class="el-heartrate-card" style="flex:1;border-color:rgba(255,140,60,0.15);background:rgba(255,140,60,0.06);"><div class="el-hr-icon" style="color:#ff8c40;">🌡</div><div class="el-hr-value" style="color:#ff8c40;">${this._esc(tp)}</div><div class="el-hr-unit">°C</div></div></div><div class="el-info-grid"><div class="el-info-item"><span class="el-info-label">状态</span><span class="el-info-val">${this._esc(this._pv(d, 'mood'))}</span></div><div class="el-info-item"><span class="el-info-label">活动</span><span class="el-info-val">${this._esc(this._pv(d, 'activity'))}</span></div><div class="el-info-item"><span class="el-info-label">位置</span><span class="el-info-val">${this._esc(this._pv(d, 'location'))}</span></div><div class="el-info-item"><span class="el-info-label">好感</span><span class="el-info-val">${this._esc(this._pv(d, 'favorability'))}</span></div></div><div class="el-thought"><div class="el-thought-label">💭</div><div class="el-thought-text">${this._esc(this._pv(d, 'thought'))}</div></div></div>`;
     }
 
     _cell(label, val) {
@@ -531,14 +593,14 @@ export class EroLinksView {
         return `<div class="el-secret-scroll">
             <div class="el-secret-section"><div class="el-secret-section-title">🔞 身体（可探测）</div>
             <div class="el-secret-grid">
-                ${this._cellWide('胸部', d.breast)}
-                ${this._cellWide('小穴', d.vulva)}
-                ${this._cell('敏感', d.sensitive)}
-                ${this._cell('湿润', d.wetness)}
-                ${this._cell('快感阶段', d.arousal)}
-                ${this._cell('身体变化', d.bodyChange)}
+                ${this._cellWide('胸部', this._pv(d, 'breast'))}
+                ${this._cellWide('小穴', this._pv(d, 'vulva'))}
+                ${this._cell('敏感', this._pv(d, 'sensitive'))}
+                ${this._cell('湿润', this._pv(d, 'wetness'))}
+                ${this._cell('快感阶段', this._pv(d, 'arousal'))}
+                ${this._cell('身体变化', this._pv(d, 'bodyChange'))}
             </div></div>
-            <div class="el-ro-hint">人物信息只读展示；更衣请到「催眠与指令 → 着装」</div>
+            <div class="el-ro-hint">人物信息只读；更衣请到「催眠与指令 → 着装」</div>
         </div>`;
     }
 
@@ -583,7 +645,8 @@ export class EroLinksView {
         let any = false;
         const body = zs.map((z) => {
             let items = o[z.id] || [];
-            if (!items.length) items = [{ name: '待确认', desc: '' }];
+            // 空分区 = 未穿着（世界书全裸默认），不是待确认
+            if (!items.length) items = [{ name: '无', desc: '' }];
             let html = `<div class="el-outfit-zone"><div class="el-outfit-zone-title">${z.l}</div>`;
             items.forEach((item, idx) => {
                 const st = EStore.outfitSlotState(item);
@@ -774,7 +837,7 @@ export class EroLinksView {
         const m = this._hypnoModes().find((x) => x.k === k);
         if (!m) return;
         const who = this._linkedData?.charName || '目标';
-        const draft = `【催眠指令 · ${m.n}】\n对象：${who}\n${m.draft}\n（可按剧情改写后再发送。）`;
+        const draft = `【催眠指令 · ${m.n}】\n对象：${who}\n${m.draft}`;
         if (!confirm(`导出催眠指令并标记为「生效中」？\n\n${draft}`)) return;
         if (!Bridge.appendToChatInput(draft)) {
             this.app.phoneShell?.showNotification?.('写入失败', '未找到输入框', '❌');
