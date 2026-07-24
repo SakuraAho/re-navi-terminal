@@ -251,10 +251,10 @@ export class NaviView {
         </div><div class="navi-scroll">
             <div class="navi-section">
                 <div class="navi-section-title">${this.mode === 'observation' ? '🔍 观测模式' : '✋ 把玩模式'}</div>
-                ${this._renderOptToggle('action', '🏃 动作指示', jinguan ? '静观档已禁用动作指示（保持自然）' : '指定姿态/动作；留空则 AI 设计', jinguan)}
-                ${this._renderOptToggle('items', '🧴 辅助物品', '指定道具；留空则 AI 设计')}
-                ${this._renderOptToggle('assist', '👥 协助人员', '如「目标自己」或另一角色；留空则 AI 设计')}
-                ${this._renderOptToggle('target', '🎯 对象指定', '固定角色名；留空则统一随机/世界书目标')}
+                ${this._renderOptToggle('action', '🏃 动作指示', jinguan ? '静观档已禁用（保持自然）' : '关键动作融入步骤流程；留空则 AI 设计', jinguan)}
+                ${this._renderOptToggle('items', '🧴 辅助物品', '主要交互物（道具/身体部位均可，肢体勿当道具写）；留空则 AI 设计')}
+                ${this._renderOptToggle('assist', '👥 协助人员', '全程协助，方式自主；留空则 AI 设计')}
+                ${this._renderOptToggle('target', '🎯 对象指定', '仅固定目标是谁；留空则统一随机/自创')}
             </div>
             <div class="navi-section">
                 <div class="navi-section-title">部位焦点池（最多${Store.MAX_SITES}个 · 条数独立）</div>
@@ -447,56 +447,114 @@ export class NaviView {
         const optGet = (k) => !!opts?.[k];
         const optText = (k) => String(opts?.[k + '_text'] || '').trim();
 
-        const buildHint = (key, label, mainWord, desc) => {
-            if (!optGet(key)) return '';
-            const text = optText(key);
-            if (text) {
-                return `【强制要求 - ${label}】以下指定的${label}必须作为全部${n}个委托的${mainWord}。每个委托都要切实体现，${desc}：\n${text}\n【强制要求结束】`;
+        /** 辅助内容是否像人类肢体/器官（不当道具） */
+        const looksLikeBodyPart = (t) => {
+            const s = String(t || '');
+            return /阴茎|肉棒|鸡巴|手指|指腹|指尖|舌头|唇|嘴|手掌|手|足|脚|脚趾|大腿|胸部|乳房|乳头|腰|腹|性器|器官|肢体/.test(s);
+        };
+
+        const buildActionHint = () => {
+            if (!optGet('action')) return '';
+            const t = optText('action');
+            if (t) {
+                return `【强制要求 - 动作指示】
+下列动作必须融入全部${n}个委托的「步骤」流程中（作为过程中的关键行动，不是单独表演、也不写成长段描写）：
+${t}
+- 用短祈使句写进步骤；禁止把动作展开成过程描写或结果描写。
+【强制要求结束】`;
             }
-            return `【强制要求 - ${label}】你必须为全部${n}个委托各自原创设计${mainWord}。每个委托的${mainWord}要具体、多样、互不重复。\n【强制要求结束】`;
+            return `【强制要求 - 动作指示】为全部${n}个委托各自设计不同的关键动作，并写入步骤（短句、融入流程）。\n【强制要求结束】`;
+        };
+
+        const buildItemsHint = () => {
+            if (!optGet('items')) return '';
+            const t = optText('items');
+            if (!t) {
+                return `【强制要求 - 辅助物品】为全部${n}个委托指定主要交互物，并在步骤中实际使用。\n【强制要求结束】`;
+            }
+            const body = looksLikeBodyPart(t);
+            if (body) {
+                return `【强制要求 - 辅助物品·身体部位】
+下列内容是「身体部位/器官」，不是可拿起的分离道具：
+${t}
+- 必须作为全部${n}个委托的主要交互手段，在步骤中实际使用。
+- 禁止写成「道具/工具/物品/拿起/取出/放下」。
+- 应写成当事人身上的部位在使用（如主角用自身××接触、抵住、插入等，按用户所写归属理解）。
+- 步骤仍保持短祈使句，不写体感/形态结论。
+【强制要求结束】`;
+            }
+            return `【强制要求 - 辅助物品·实物/环境】
+下列内容是主要交互物，必须在全部${n}个委托的步骤中被实际使用（接触主焦点或达成委托目的）：
+${t}
+- 禁止只在文案里提一句却不进入步骤。
+- 步骤短句；禁止过程描写与结果描写。
+【强制要求结束】`;
+        };
+
+        const buildAssistHint = () => {
+            if (!optGet('assist')) return '';
+            const t = optText('assist');
+            if (t) {
+                return `【强制要求 - 协助人员】
+协助者：${t}
+- 须全程协助本批委托完成。
+- 具体如何协助由该人员自行决定，不要在步骤里写死其操作清单或手法教程。
+- 步骤中最多点到「有其在场/配合」，不要规定其逐步动作。
+- 若协助者为目标自己/本人：由目标自主配合，仍不要写死每一步手法。
+【强制要求结束】`;
+            }
+            return `【强制要求 - 协助人员】为全部${n}个委托安排协助者；协助方式自主，步骤不写死手法。\n【强制要求结束】`;
         };
 
         const buildTargetHint = () => {
             if (!optGet('target')) return '';
             const text = optText('target');
             if (text) {
-                return `【强制要求 - 对象指定】全部${n}个委托的目标固定为【${text}】。世界书有则提取其种族/年龄/胸穴，无则自行设定，信息保持一致。需要生成${n}种不同的委托方式。\n【强制要求结束】`;
+                return `【强制要求 - 对象指定】
+全部${n}个委托的任务目标人物固定为【${text}】。
+- 只固定「是谁」，不额外规定玩法。
+- 世界书有同名则补种族/年龄/胸穴，无则自定；${n}条信息一致，步骤方式可不同。
+【强制要求结束】`;
             }
-            return `【强制要求 - 对象指定】从世界书随机选一名角色（无则自创）作为全部${n}个委托的统一目标，信息一致，方式各不相同。\n【强制要求结束】`;
+            return `【强制要求 - 对象指定】从世界书选一人或自创一人，作为全部${n}个委托的统一目标；只固定身份，不锁玩法细节。\n【强制要求结束】`;
         };
 
         const buildSiteFocusHint = () => {
             const lines = focuses.slice(0, n).map((s, i) => `委托${i + 1}主焦点：${s}`);
-            return `【强制要求 - 部位焦点】本批每条委托必须使用下列主焦点（写入观测部位/观察焦点/体验焦点）：\n${lines.join('\n')}\n主记录点必须落在对应主焦点上。\n【强制要求结束】`;
+            return `【强制要求 - 部位焦点】本批每条主焦点如下，步骤必须直接服务该焦点：\n${lines.join('\n')}\n【强制要求结束】`;
         };
 
         const buildConstraints = () => {
-            const items = [];
+            const items = [`当前档【${difficulty}】。`, '步骤必须纯行动短句，禁止过程/结果/感受描写。'];
             const targetName = optGet('target') ? optText('target') : '';
             const assistName = optGet('assist') ? optText('assist') : '';
-            const isSelf = assistName && targetName && assistName === targetName;
-                items.push(`当前档【${difficulty}】。`);
+            const itemT = optGet('items') ? optText('items') : '';
             if (optGet('target')) {
                 items.push(targetName
-                    ? `对象指定：全部${n}个委托目标固定为【${targetName}】${isSelf ? '（目标同时担任协助者）' : ''}。`
-                    : `对象指定：统一目标，${n}种不同方式。`);
+                    ? `对象指定：仅固定目标为【${targetName}】。`
+                    : '对象指定：统一目标人物。');
             }
             if (optGet('action')) {
                 const t = optText('action');
-                items.push(t ? `动作指示：主要姿势/动作围绕"${t}"。` : '动作指示：为每个委托设计不同主要动作。');
+                items.push(t
+                    ? `动作指示：将「${t}」融入步骤流程（短句）。`
+                    : '动作指示：关键动作写入步骤。');
             }
             if (optGet('items')) {
-                const t = optText('items');
-                items.push(t
-                    ? `辅助物品：道具"${t}"须出现在每个委托中。`
-                    : '辅助物品：为每个委托指定不同道具。');
+                if (itemT && looksLikeBodyPart(itemT)) {
+                    items.push(`辅助交互：身体部位「${itemT}」作主要交互手段，禁止写成道具。`);
+                } else if (itemT) {
+                    items.push(`辅助物品：「${itemT}」须在步骤中实际使用。`);
+                } else {
+                    items.push('辅助物品：主要交互物须写入步骤并实际使用。');
+                }
             }
             if (optGet('assist')) {
                 items.push(assistName
-                    ? `协助人员：协助者为"${assistName}"${isSelf || /目标自己|自身|本人/.test(assistName) ? '（目标主动配合）' : ''}。`
-                    : '协助人员：为每个委托指定不同协助者。');
+                    ? `协助人员：【${assistName}】全程协助，方式自主，步骤不写死手法。`
+                    : '协助人员：全程协助，方式自主。');
             }
-            return '⚠️ 当前生效的强制约束（优先级最高）：\n' + items.map((s, i) => (i + 1) + '. ' + s).join('\n');
+            return '⚠️ 强制约束（优先级最高）：\n' + items.map((s, i) => (i + 1) + '. ' + s).join('\n');
         };
 
         const story = Bridge.getStoryTimeParts();
@@ -516,29 +574,19 @@ export class NaviView {
             .replace(/\{\{DIFFICULTY\}\}/g, difficulty)
             .replace(/\{\{SUPPLEMENT\}\}/g, this._getSupplement())
             .replace(/\{\{WORLDBOOK\}\}/g, worldbookText || '无')
-            .replace(/\{\{ACTION_HINT\}\}/g, buildHint('action', '动作指示', '主要姿势或动作', '写入执行步骤'))
-            .replace(/\{\{ITEMS_HINT\}\}/g, (() => {
-                if (!optGet('items')) return '';
-                const t = optText('items');
-                if (t) return `【强制要求 - 辅助物品】道具须出现在全部${n}个委托：\n${t}\n【强制要求结束】`;
-                return `【强制要求 - 辅助物品】为全部${n}个委托各自指定不同道具。\n【强制要求结束】`;
-            })())
-            .replace(/\{\{ASSIST_HINT\}\}/g, (() => {
-                const h = buildHint('assist', '协助人员', '协助人员及参与方式', '描述如何参与');
-                if (!h) return '';
-                const t = optText('assist');
-                if (t && /目标自己|自身|本人/.test(t)) {
-                    return h.replace('【强制要求结束】', '协助为【目标自己】时，由目标主动配合展示/动作。\n【强制要求结束】');
-                }
-                return h;
-            })())
+            .replace(/\{\{ACTION_HINT\}\}/g, buildActionHint())
+            .replace(/\{\{ITEMS_HINT\}\}/g, buildItemsHint())
+            .replace(/\{\{ASSIST_HINT\}\}/g, buildAssistHint())
             .replace(/\{\{TARGET_HINT\}\}/g, buildTargetHint())
             .replace(/\{\{SITE_FOCUS_HINT\}\}/g, buildSiteFocusHint())
             .replace(/\{\{CONSTRAINTS\}\}/g, buildConstraints());
 
+        // 清理旧提示词残留的「体己师」字样（用户未恢复默认时）
+        systemPrompt = systemPrompt.replace(/体己师/g, '主角');
+
         const userMsg = feature === 'observation'
-            ? `请严格按【${difficulty}】档生成恰好${n}个观测委托。姓名任务目标必填；主焦点依次：${focuses.slice(0, n).join('、')}。社交铺垫只写「事前准备」(≤2句)；「步骤」每一条必须直接服务主焦点，禁止无关剧情进步骤；不要看/记录点/镜头字段；不写观察结论。`
-            : `请严格按【${difficulty}】档生成恰好${n}个把玩委托。姓名任务目标必填；主焦点依次：${focuses.slice(0, n).join('、')}。铺垫只写「事前准备」；「步骤」每一条必须直接作用于主焦点；不要感受/记录点/镜头字段；不写体感结论。`;
+            ? `请严格按【${difficulty}】档生成恰好${n}个观测委托。姓名必填；主焦点依次：${focuses.slice(0, n).join('、')}。事前准备≤2句；步骤必须纯行动短句且条条服务主焦点；禁止过程/结果/感受描写；禁止要看/记录点/镜头字段；禁止使用「体己师」一词。`
+            : `请严格按【${difficulty}】档生成恰好${n}个把玩委托。姓名必填；主焦点依次：${focuses.slice(0, n).join('、')}。事前准备≤2句；步骤必须纯行动短句且条条作用于主焦点；禁止过程/结果/体感结论；禁止要感受/记录点/镜头字段；禁止使用「体己师」一词。`;
 
         const result = await Bridge.callPhoneAI(
             [
