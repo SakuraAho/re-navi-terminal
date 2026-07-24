@@ -541,8 +541,8 @@ export class NaviView {
             .replace(/\{\{CONSTRAINTS\}\}/g, buildConstraints());
 
         const userMsg = feature === 'observation'
-            ? `请严格按【${difficulty}】档、视觉镜头，生成恰好${n}个观测委托。每条必须有「姓名-种族-年龄|胸穴|正在做什么」任务目标；步骤必须点名该姓名，禁止只写「目标/观者」。主焦点依次：${focuses.slice(0, n).join('、')}。要看仅2～4条空槽，禁止成品外观描写。`
-            : `请严格按【${difficulty}】档、触觉镜头，生成恰好${n}个把玩委托。每条必须有姓名任务目标；步骤点名。主焦点依次：${focuses.slice(0, n).join('、')}。要感受仅2～4条空槽。`;
+            ? `请严格按【${difficulty}】档、视觉镜头，生成恰好${n}个观测委托。每条必须有姓名任务目标；步骤点名。主焦点依次：${focuses.slice(0, n).join('、')}。只要步骤与注意，禁止「要看/记录点」及任何观察结论描写。`
+            : `请严格按【${difficulty}】档、触觉镜头，生成恰好${n}个把玩委托。每条必须有姓名任务目标；步骤点名。主焦点依次：${focuses.slice(0, n).join('、')}。只要步骤与注意，禁止「要感受/体感记录点」及成品体感描写。`;
 
         const result = await Bridge.callPhoneAI(
             [
