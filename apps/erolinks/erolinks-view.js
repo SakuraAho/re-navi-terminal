@@ -391,14 +391,27 @@ ${oSnap}
         const fields = [
             'race', 'age', 'role', 'affiliation', 'activity', 'location', 'favorability',
             'heartRate', 'temp', 'mood', 'breast', 'vulva', 'sensitive', 'wetness',
+            'arousal', 'bodyChange', 'thought',
+            // 秘密字段也不应显示字面「保持」
+            'sexExp', 'lastSex', 'mastFreq', 'lastMast', 'cycle', 'desire', 'fantasy', 'kink'
+        ];
+        // 任何字段都不允许最终展示字面「保持」
+        fields.forEach((f) => {
+            if (EStore.isKeepToken(p[f])) p[f] = '';
+        });
+        const probe = [
+            'race', 'age', 'role', 'affiliation', 'activity', 'location', 'favorability',
+            'heartRate', 'temp', 'mood', 'breast', 'vulva', 'sensitive', 'wetness',
             'arousal', 'bodyChange', 'thought'
         ];
-        fields.forEach((f) => {
+        probe.forEach((f) => {
             p[f] = EStore.probeableFallback(f, p[f]);
         });
         p.heartRate = EStore.digitsOnly(p.heartRate, '72');
         p.temp = EStore.digitsOnly(p.temp, '36.5');
-        // 保留未穿着/待确认/衣物，禁止把「无」丢掉导致 UI 全变待确认
+        ['sexExp', 'lastSex', 'mastFreq', 'lastMast', 'cycle', 'desire', 'fantasy', 'kink'].forEach((f) => {
+            if (!String(p[f] || '').trim() || EStore.isKeepToken(p[f])) p[f] = '未询问';
+        });
         p.outfit = EStore.normalizeOutfit(p.outfit);
         return p;
     }

@@ -285,13 +285,16 @@ export function formatOutfitSnapshot(outfit) {
     }).join('\n');
 }
 
-/** 非空才写入；「保持」/空 → 沿用旧值，避免无变更重写 */
+export function isKeepToken(val) {
+    const v = String(val ?? '').trim();
+    return !v || v === '—' || v === '保持' || v === '不变' || v === '无变更'
+        || /^保持/.test(v) || v.endsWith('保持');
+}
+
+/** 非空才写入；「保持」/空 → 沿用旧值（界面仍是旧文案，绝不是字面「保持」） */
 function pickFilled(baseVal, patchVal) {
-    const v = patchVal == null ? '' : String(patchVal).trim();
-    if (!v || v === '—' || v === '保持' || v === '不变' || v === '无变更' || /^保持原/.test(v)) {
-        return baseVal;
-    }
-    return v;
+    if (isKeepToken(patchVal)) return baseVal;
+    return String(patchVal).trim();
 }
 
 export function mergeProfiles(base, patch, mode = 'full') {
@@ -456,10 +459,11 @@ export function digitsOnly(val, fallback = '') {
     return m ? m[0] : fallback;
 }
 
-/** 可探测字段：禁止展示「未知」时的回退 */
+/** 可探测字段：禁止展示「未知/保持」时的回退 */
 export function probeableFallback(field, val) {
     const v = String(val ?? '').trim();
-    if (v && v !== '未知' && v !== '—' && v !== '不明') {
+    // 「保持」不是展示值
+    if (v && v !== '未知' && v !== '—' && v !== '不明' && !isKeepToken(v)) {
         if (field === 'heartRate') return digitsOnly(v, '72');
         if (field === 'temp') return digitsOnly(v, '36.5');
         return v;
