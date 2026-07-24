@@ -233,17 +233,22 @@ export function clearHypnoSession() {
     return saveHypnoSession(null);
 }
 
-/** 服装槽展示态：bare | item | pending | hair */
+/** 服装槽展示态：bare | item | pending | hair
+ * 空/无信息 → 待确认（不默认全裸，避免非琉夏岛世界被剥光）
+ * 明确无衣 → 未穿着
+ * 有描述 → 衣物
+ */
 export function outfitSlotState(item) {
-    // 空槽默认未穿着（全裸世界观优先），不是待确认
-    if (!item) return { state: 'bare', name: '未穿着', desc: '' };
+    if (!item) return { state: 'pending', name: '待确认', desc: '' };
     const name = String(item.name || item || '').trim();
     const desc = String(item.desc || '').trim();
     const raw = (name + ' ' + desc).trim();
-    if (!raw || raw === '无' || raw === '无。' || raw === '未穿着' || raw === '裸' || raw === '赤裸') {
+    if (!raw) return { state: 'pending', name: '待确认', desc: '' };
+    // 明确未穿着（世界书/正文写明无衣）
+    if (raw === '无' || raw === '无。' || raw === '未穿着' || raw === '裸' || raw === '赤裸' || /^无衣|未着|一丝不挂|全裸$/.test(raw)) {
         return { state: 'bare', name: '未穿着', desc: '' };
     }
-    if (/^待确认$|未提及|不明|看不清|无法确认/.test(raw)) {
+    if (/^待确认$|未提及|不明|看不清|无法确认|不确定/.test(raw)) {
         return { state: 'pending', name: '待确认', desc: '' };
     }
     if (/发型|头发|发色|发尾|长发|短发|马尾|双马尾|卷发|直发/.test(raw) && !/饰|夹|绳|箍|帽|发卡|发带/.test(raw)) {
