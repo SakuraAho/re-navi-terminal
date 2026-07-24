@@ -3,7 +3,7 @@
     "name": "navi-terminal-ext",
     "description": "N.A.V.I.体己师观测终端独立扩展面板——观测委托、EroLinks身心链接、催眠控制中心。",
     "author": "SakuraAho (NAVI改装)",
-    "version": "2.0.0",
+    "version": "2.1.0",
     "loading_order": 201,
     "requires": [],
     "optional": [],

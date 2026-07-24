@@ -1,26 +1,175 @@
-/* N.A.V.I. EroLinks v3.0 — 直接LINK */
+/* N.A.V.I. EroLinks v3.1 — 经 bridge 安全桥接 */
 
-(function(){if(document.getElementById('erolinks-styles'))return;const l=document.createElement('link');l.id='erolinks-styles';l.rel='stylesheet';l.href=new URL('./erolinks.css?v=3.0.0',import.meta.url).href;document.head.appendChild(l);})();
+(function () {
+    if (document.getElementById('erolinks-styles')) return;
+    const l = document.createElement('link');
+    l.id = 'erolinks-styles';
+    l.rel = 'stylesheet';
+    l.href = new URL('./erolinks.css?v=3.1.0', import.meta.url).href;
+    document.head.appendChild(l);
+})();
 
-const TABS=[{key:'info',icon:'📋'},{key:'secret',icon:'🔞'},{key:'outfit',icon:'👗'},{key:'hypno',icon:'🧠'}];
+import Bridge from '../../bridge.js';
 
-export class EroLinksView{constructor(app){this.app=app;this.currentView='main';this.activeTab='info';this._loading=false;this._linkedData=null;this._wbRendered=false;this._outfitChanges={};window.VirtualPhone._erolinksView=this;}
-_esc(v){return String(v??'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
-render(){let h;if(this.currentView==='settings')h=this._renderSettings();else if(this.currentView==='linked'&&this._linkedData)h=this._renderLinked();else h=this._renderMain();this.app.phoneShell.setContent(h,'erolinks-'+this.currentView);if(this.currentView==='settings')this._bindSettings();}
-goSettings(){this.currentView='settings';this._wbRendered=false;this.render();}
-goBack(){this.currentView=this._linkedData?'linked':'main';this.render();}
-goMain(){this.currentView='main';this._loading=false;this.render();}
-switchTab(k){this.activeTab=k;this.render();}
-disconnect(){this._linkedData=null;this._outfitChanges={};this.currentView='main';this.activeTab='info';this.render();}
+const TABS = [
+    { key: 'info', icon: '📋' },
+    { key: 'secret', icon: '🔞' },
+    { key: 'outfit', icon: '👗' },
+    { key: 'hypno', icon: '🧠' }
+];
 
-// === 主页 LINK ===
-_renderMain(){return`<div class="erolinks-app"><div class="erolinks-bar"><div class="erolinks-bar-btn" onclick="window.VirtualPhone._erolinksView.goSettings()">⚙️</div></div><div class="erolinks-main"><div class="erolinks-link-btn ${this._loading?'loading':''}" onclick="window.VirtualPhone._erolinksView._linkChar()"><div class="erolinks-link-ring"></div><div class="erolinks-link-text">${this._loading?'⏳':'LINK'}</div>${this._loading?'<div class="erolinks-link-sub">链接中...</div>':''}</div><div class="erolinks-hint">链接当前对话中的角色</div></div></div>`;}
+export class EroLinksView {
+    constructor(app) {
+        this.app = app;
+        this.currentView = 'main';
+        this.activeTab = 'info';
+        this._loading = false;
+        this._linkedData = null;
+        this._wbRendered = false;
+        this._outfitChanges = {};
+        this._lastRaw = '';
+        if (window.NaviTerm) window.NaviTerm.erolinksView = this;
+        // 确保默认 link 提示词入仓
+        Bridge.ensurePromptDefaults('erolinks', {
+            link: { enabled: true, name: 'EroLinks LINK', content: this._getDefaultLinkPrompt('[世界书内容]', '[最后一条聊天记录]'), order: 10 }
+        }, 2);
+    }
 
-// === 链接角色 ===
-async _linkChar(){if(this._loading)return;this._loading=true;this.render();try{const ctx=(typeof SillyTavern!=='undefined'&&SillyTavern.getContext)?SillyTavern.getContext():null;const api=window.VirtualPhone?.apiManager;if(!api||!ctx)throw new Error('核心未就绪');const wbMsg=await window.VirtualPhone?.worldbookManager?.buildWorldbookMessage('erolinks');const worldbookText=wbMsg?.content||'';const chat=ctx.chat||[];const lastMsg=chat.length>0?chat[chat.length-1]:null;const lastMessageText=lastMsg?`${lastMsg.name||'??'}: ${String(lastMsg.mes||'')}`:'（无）';const systemPrompt=this._getLinkPrompt(worldbookText,lastMessageText);const result=await api.callAI([{role:'system',content:systemPrompt},{role:'user',content:'请建立链接并输出结果。'}],{appId:'erolinks',max_tokens:ctx.max_response_length||2048});if(!result?.success)throw new Error(result?.error||'连接失败');const text=String(result.summary||'');const ex=(label)=>{const idx=text.indexOf('【'+label+'】');if(idx===-1)return'';const start=idx+label.length+2;const rest=text.substring(start);const nb=rest.indexOf('\n【');const val=nb>0?rest.substring(0,nb):nb===0?rest.substring(1):rest;return val.trim();};let outfitRaw='';const outfitIdx=text.indexOf('【服装穿着】');if(outfitIdx!==-1){outfitRaw=text.substring(outfitIdx+6).trim();}this._linkedData={charName:ex('链接角色')||'角色',race:ex('种族'),age:ex('年龄'),role:ex('身份'),affiliation:ex('所属'),activity:ex('当前活动'),location:ex('所在位置'),favorability:ex('好感度'),heartRate:ex('心率'),temp:ex('体温'),mood:ex('当前状态'),breast:ex('胸部'),vulva:ex('小穴'),sexExp:ex('性经验'),lastSex:ex('最近性行为'),mastFreq:ex('自慰频率'),lastMast:ex('最近自慰'),sensitive:ex('敏感部位'),wetness:ex('湿润状态'),arousal:ex('快感阶段'),cycle:ex('生理周期'),desire:ex('当前欲望'),fantasy:ex('幻想内容'),kink:ex('秘密嗜好'),bodyChange:ex('身体变化'),thought:ex('心理所想'),outfit:this._parseOutfit(outfitRaw)};this._saveConfirmed();this.currentView='linked';this.activeTab='info';this._outfitChanges={};}catch(err){console.error('[EroLinks]',err);this.app.phoneShell?.showNotification?.('链接失败',err.message,'❌');}this._loading=false;this.render();}
+    _esc(v) { return Bridge.escapeHtml(v); }
 
-// === 链接提示词 ===
-_getLinkPrompt(worldbookText,chatText){return`你是EroLinks身心链接模块。请从下方聊天记录中识别当前正在发言或被提及的角色，链接该角色。
+    render() {
+        let h;
+        if (this.currentView === 'settings') h = this._renderSettings();
+        else if (this.currentView === 'linked' && this._linkedData) h = this._renderLinked();
+        else h = this._renderMain();
+        this.app.phoneShell.setContent(h, 'erolinks-' + this.currentView);
+        if (this.currentView === 'settings') this._bindSettings();
+    }
+
+    goSettings() { this.currentView = 'settings'; this._wbRendered = false; this.render(); }
+    goBack() { this.currentView = this._linkedData ? 'linked' : 'main'; this.render(); }
+    goMain() { this.currentView = 'main'; this._loading = false; this.render(); }
+    switchTab(k) { this.activeTab = k; this.render(); }
+    disconnect() {
+        this._linkedData = null;
+        this._outfitChanges = {};
+        this.currentView = 'main';
+        this.activeTab = 'info';
+        this.render();
+    }
+
+    _renderMain() {
+        return `<div class="erolinks-app"><div class="erolinks-bar"><div class="erolinks-bar-btn" onclick="window.NaviTerm.erolinksView.goSettings()">⚙️</div></div><div class="erolinks-main"><div class="erolinks-link-btn ${this._loading ? 'loading' : ''}" onclick="window.NaviTerm.erolinksView._linkChar()"><div class="erolinks-link-ring"></div><div class="erolinks-link-text">${this._loading ? '⏳' : 'LINK'}</div>${this._loading ? '<div class="erolinks-link-sub">链接中...</div>' : ''}</div><div class="erolinks-hint">链接当前对话中的角色</div></div></div>`;
+    }
+
+    async _linkChar() {
+        if (this._loading) return;
+        this._loading = true;
+        this.render();
+        try {
+            if (!Bridge.isCoreReady()) {
+                throw new Error(Bridge.describeReadiness().message || '核心未就绪');
+            }
+            const ctx = Bridge.getSTContext();
+            if (!ctx) throw new Error('SillyTavern 上下文不可用');
+
+            const worldbookText = Bridge.getWorldbookEnabled('erolinks', true)
+                ? await Bridge.buildWorldbookText('erolinks')
+                : '';
+            const chat = ctx.chat || [];
+            const lastMsg = chat.length > 0 ? chat[chat.length - 1] : null;
+            const lastMessageText = lastMsg
+                ? `${lastMsg.name || '??'}: ${String(lastMsg.mes || '')}`
+                : '（无）';
+
+            const systemPrompt = this._resolveLinkPrompt(worldbookText, lastMessageText);
+
+            const result = await Bridge.callPhoneAI(
+                [
+                    { role: 'system', content: systemPrompt },
+                    { role: 'user', content: '请建立链接并输出结果。' }
+                ],
+                { appId: 'erolinks', max_tokens: ctx.max_response_length || 2048 }
+            );
+            if (!result?.success) throw new Error(result?.error || '连接失败');
+
+            const text = String(result.summary || '');
+            this._lastRaw = text;
+            const ex = (label) => {
+                const idx = text.indexOf('【' + label + '】');
+                if (idx === -1) return '';
+                const start = idx + label.length + 2;
+                const rest = text.substring(start);
+                const nb = rest.indexOf('\n【');
+                const val = nb > 0 ? rest.substring(0, nb) : nb === 0 ? rest.substring(1) : rest;
+                return val.trim();
+            };
+            let outfitRaw = '';
+            const outfitIdx = text.indexOf('【服装穿着】');
+            if (outfitIdx !== -1) outfitRaw = text.substring(outfitIdx + 6).trim();
+
+            this._linkedData = {
+                charName: ex('链接角色') || '角色',
+                race: ex('种族'),
+                age: ex('年龄'),
+                role: ex('身份'),
+                affiliation: ex('所属'),
+                activity: ex('当前活动'),
+                location: ex('所在位置'),
+                favorability: ex('好感度'),
+                heartRate: ex('心率'),
+                temp: ex('体温'),
+                mood: ex('当前状态'),
+                breast: ex('胸部'),
+                vulva: ex('小穴'),
+                sexExp: ex('性经验'),
+                lastSex: ex('最近性行为'),
+                mastFreq: ex('自慰频率'),
+                lastMast: ex('最近自慰'),
+                sensitive: ex('敏感部位'),
+                wetness: ex('湿润状态'),
+                arousal: ex('快感阶段'),
+                cycle: ex('生理周期'),
+                desire: ex('当前欲望'),
+                fantasy: ex('幻想内容'),
+                kink: ex('秘密嗜好'),
+                bodyChange: ex('身体变化'),
+                thought: ex('心理所想'),
+                outfit: this._parseOutfit(outfitRaw)
+            };
+            this._saveConfirmed();
+            this.currentView = 'linked';
+            this.activeTab = 'info';
+            this._outfitChanges = {};
+        } catch (err) {
+            console.error('[EroLinks]', err, this._lastRaw ? { rawPreview: this._lastRaw.slice(0, 400) } : '');
+            this.app.phoneShell?.showNotification?.('链接失败', err.message, '❌');
+        }
+        this._loading = false;
+        this.render();
+    }
+
+    _resolveLinkPrompt(worldbookText, chatText) {
+        const wb = worldbookText || '无';
+        const chat = chatText || '无';
+        const stored = Bridge.getTermPrompt('erolinks', 'link', '');
+        if (stored && stored.includes('【链接角色】')) {
+            if (stored.includes('[世界书内容]') || stored.includes('[最后一条聊天记录]')) {
+                return stored
+                    .replace(/\[世界书内容\]/g, wb)
+                    .replace(/\[最后一条聊天记录\]/g, chat);
+            }
+            // 用户完全自定义且无占位：附加实时上下文，避免丢世界书/聊天
+            if (!stored.includes('世界书：') || !stored.includes('聊天记录：')) {
+                return `${stored}\n\n世界书：${wb}\n聊天记录：${chat}`;
+            }
+            return stored;
+        }
+        return this._getDefaultLinkPrompt(wb, chat);
+    }
+
+    _getDefaultLinkPrompt(worldbookText, chatText) {
+        return `你是EroLinks身心链接模块。请从下方聊天记录中识别当前正在发言或被提及的角色，链接该角色。
 
 核心规则——世界书使用判断：
 检查下方世界书中是否存在角色名恰好相同的条目。
@@ -105,34 +254,292 @@ _getLinkPrompt(worldbookText,chatText){return`你是EroLinks身心链接模块�
 【鞋子】-物品（若有则独立一行。若无则写"- 无"）
 【装饰】-物品（每个配饰独占一行，手环/脚环/耳环/戒指/背包等各一行。未佩戴则写"- 无"）
 
-世界书：${worldbookText||'无'}
-聊天记录：${chatText||'无'}`;}
+世界书：${worldbookText || '无'}
+聊天记录：${chatText || '无'}`;
+    }
 
-// === 持久化已确认 ===
-_vpSet(k,v){const VP=window.VirtualPhone;if(VP?.storage){VP.storage.set(k,v);try{const ctx=(typeof SillyTavern!=='undefined'&&SillyTavern.getContext)?SillyTavern.getContext():null;if(ctx?.extensionSettings){if(!ctx.extensionSettings.variables)ctx.extensionSettings.variables={};if(!ctx.extensionSettings.variables.global)ctx.extensionSettings.variables.global={};ctx.extensionSettings.variables.global[k]=v;if(typeof ctx.saveSettingsDebounced==='function')ctx.saveSettingsDebounced();}}catch(e){}}try{localStorage.setItem(k,typeof v==='string'?v:JSON.stringify(v));}catch(e){}}
-_vpGet(k,def=''){const VP=window.VirtualPhone;if(VP?.storage){const v=VP.storage.get(k,null);if(v!==null&&v!==undefined)return v;}try{const ctx=(typeof SillyTavern!=='undefined'&&SillyTavern.getContext)?SillyTavern.getContext():null;const gv=ctx?.extensionSettings?.variables?.global?.[k];if(gv)return gv;}catch(e){}try{const s=localStorage.getItem(k);if(s){try{return JSON.parse(s);}catch(e){return s;}}}catch(e){}return def;}
-_sanitizeName=n=>n.replace(/[^a-zA-Z0-9_\-\u4e00-\u9fff]/g,'_').replace(/^[^a-zA-Z\u4e00-\u9fff]+/,'').replace(/[_\-]+$/,'')||'unknown';
-_saveConfirmed(){const d=this._linkedData;if(!d)return;const key='navi_erolinks_'+this._sanitizeName(d.charName);const existing=this._loadConfirmed(key);const confirmed={};['charName','race','age','role','affiliation','sexExp','lastSex','mastFreq','lastMast','kink'].forEach(f=>{const v=d[f]||existing[f];if(v&&v!=='未知'&&v!=='—')confirmed[f]=v;});const text=Object.entries(confirmed).map(([k,v])=>k+'：'+v).join('\n');this._vpSet(key,text);}
-_loadConfirmed(key){const text=this._vpGet(key,'');if(!text)return{};const result={};String(text).split('\n').forEach(line=>{const ci=line.indexOf('：');if(ci>0)result[line.substring(0,ci).trim()]=line.substring(ci+1).trim();});return result;}
-_getConfirmedText(){const d=this._linkedData;if(!d)return'';return this._vpGet('navi_erolinks_'+this._sanitizeName(d.charName),'');}
+    _sanitizeName = (n) => String(n || '')
+        .replace(/[^a-zA-Z0-9_\-\u4e00-\u9fff]/g, '_')
+        .replace(/^[^a-zA-Z\u4e00-\u9fff]+/, '')
+        .replace(/[_\-]+$/, '') || 'unknown';
 
-// === 已链接页 ===
-_renderLinked(){const d=this._linkedData;return`<div class="erolinks-app"><div class="erolinks-bar"><div class="erolinks-bar-btn" onclick="window.VirtualPhone._erolinksView._linkChar()">🔄</div><div class="erolinks-bar-btn" onclick="window.VirtualPhone._erolinksView.goSettings()">⚙️</div></div><div class="el-tabs">${TABS.map(t=>`<div class="el-tab${this.activeTab===t.key?' active':''}" onclick="window.VirtualPhone._erolinksView.switchTab('${t.key}')">${t.icon}</div>`).join('')}</div><div class="el-tab-content">${this._renderTabContent(d)}</div><div class="el-bottom-bar"><button class="el-disconnect-btn" onclick="window.VirtualPhone._erolinksView.disconnect()">🔌 断开链接</button></div></div>`;}
-_renderTabContent(d){switch(this.activeTab){case'info':return this._renderInfoTab(d);case'secret':return this._renderSecretTab(d);case'outfit':return this._renderOutfitTab();case'hypno':return this._renderHypnoTab();default:return'';}}
-_renderInfoTab(d){return`<div class="el-info-scroll"><div class="el-avatar-area"><div class="el-avatar-ring"><div class="el-avatar-inner">${this._esc(d.charName).charAt(0)}</div></div><div class="el-char-name">${this._esc(d.charName)}</div></div><div class="el-info-grid"><div class="el-info-item"><span class="el-info-label">种族</span><span class="el-info-val">${this._esc(d.race||'—')}</span></div><div class="el-info-item"><span class="el-info-label">年龄</span><span class="el-info-val">${this._esc(d.age||'—')}</span></div><div class="el-info-item"><span class="el-info-label">身份</span><span class="el-info-val">${this._esc(d.role||'—')}</span></div><div class="el-info-item"><span class="el-info-label">所属</span><span class="el-info-val">${this._esc(d.affiliation||'—')}</span></div></div><div style="display:flex;gap:6px;margin-bottom:8px;"><div class="el-heartrate-card" style="flex:1;"><div class="el-hr-icon">💓</div><div class="el-hr-value">${this._esc(d.heartRate||'72')}</div><div class="el-hr-unit">BPM</div><div class="el-hr-wave"></div></div><div class="el-heartrate-card" style="flex:1;border-color:rgba(255,140,60,0.15);background:rgba(255,140,60,0.06);"><div class="el-hr-icon" style="color:#ff8c40;">🌡</div><div class="el-hr-value" style="color:#ff8c40;">${this._esc(d.temp||'36.5')}</div><div class="el-hr-unit">°C</div></div></div><div class="el-info-grid"><div class="el-info-item"><span class="el-info-label">状态</span><span class="el-info-val">${this._esc(d.mood||'—')}</span></div><div class="el-info-item"><span class="el-info-label">活动</span><span class="el-info-val">${this._esc(d.activity||'—')}</span></div><div class="el-info-item"><span class="el-info-label">位置</span><span class="el-info-val">${this._esc(d.location||'—')}</span></div><div class="el-info-item"><span class="el-info-label">好感</span><span class="el-info-val">${this._esc(d.favorability||'—')}</span></div></div>${d.thought?`<div class="el-thought"><div class="el-thought-label">💭</div><div class="el-thought-text">${this._esc(d.thought)}</div></div>`:''}</div>`;}
-_renderSecretTab(d){return`<div class="el-secret-scroll"><div class="el-secret-section"><div class="el-secret-section-title">🔞 胸穴状态</div><div class="el-secret-grid"><div class="el-secret-item wide"><span class="el-secret-label">胸部</span><span class="el-secret-val">${this._esc(d.breast||'—')}</span></div><div class="el-secret-item wide"><span class="el-secret-label">小穴</span><span class="el-secret-val">${this._esc(d.vulva||'—')}</span></div></div></div><div class="el-secret-section"><div class="el-secret-section-title">📊 性经验</div><div class="el-secret-grid"><div class="el-secret-item"><span class="el-secret-label">经验</span><span class="el-secret-val">${this._esc(d.sexExp||'—')}</span></div><div class="el-secret-item"><span class="el-secret-label">最近</span><span class="el-secret-val">${this._esc(d.lastSex||'—')}</span></div><div class="el-secret-item"><span class="el-secret-label">自慰频率</span><span class="el-secret-val">${this._esc(d.mastFreq||'—')}</span></div><div class="el-secret-item"><span class="el-secret-label">最近自慰</span><span class="el-secret-val">${this._esc(d.lastMast||'—')}</span></div></div></div><div class="el-secret-section"><div class="el-secret-section-title">🌡 生理</div><div class="el-secret-grid"><div class="el-secret-item"><span class="el-secret-label">敏感</span><span class="el-secret-val">${this._esc(d.sensitive||'—')}</span></div><div class="el-secret-item"><span class="el-secret-label">湿润</span><span class="el-secret-val">${this._esc(d.wetness||'—')}</span></div><div class="el-secret-item"><span class="el-secret-label">快感阶段</span><span class="el-secret-val">${this._esc(d.arousal||'—')}</span></div><div class="el-secret-item"><span class="el-secret-label">周期</span><span class="el-secret-val">${this._esc(d.cycle||'—')}</span></div></div></div><div class="el-secret-section"><div class="el-secret-section-title">💭 欲望</div><div class="el-secret-grid"><div class="el-secret-item wide"><span class="el-secret-label">欲望</span><span class="el-secret-val">${this._esc(d.desire||'—')}</span></div><div class="el-secret-item wide"><span class="el-secret-label">幻想</span><span class="el-secret-val">${this._esc(d.fantasy||'—')}</span></div><div class="el-secret-item wide"><span class="el-secret-label">嗜好</span><span class="el-secret-val">${this._esc(d.kink||'—')}</span></div><div class="el-secret-item wide"><span class="el-secret-label">变化</span><span class="el-secret-val">${this._esc(d.bodyChange||'—')}</span></div></div></div></div>`;}
+    _saveConfirmed() {
+        const d = this._linkedData;
+        if (!d) return;
+        const key = 'navi_erolinks_' + this._sanitizeName(d.charName);
+        const existing = this._loadConfirmed(key);
+        const confirmed = {};
+        ['charName', 'race', 'age', 'role', 'affiliation', 'sexExp', 'lastSex', 'mastFreq', 'lastMast', 'kink'].forEach((f) => {
+            const v = d[f] || existing[f];
+            if (v && v !== '未知' && v !== '—') confirmed[f] = v;
+        });
+        const text = Object.entries(confirmed).map(([k, v]) => k + '：' + v).join('\n');
+        Bridge.termSet(key, text, true);
+    }
 
-// === 服装 ===
-_renderOutfitTab(){const o=this._linkedData?.outfit||{};const zs=[{id:'head',l:'👒 头部'},{id:'neck',l:'🧣 脖子'},{id:'upper',l:'👚 上身躯体'},{id:'hands',l:'🧤 双手'},{id:'lower',l:'👖 下身躯体'},{id:'legs',l:'🦵 腿脚'},{id:'acc',l:'💍 装饰'}];const zoneItems=z=>o[z.id]||[];const hasAny=Object.values(o).some(a=>a.length>0);const chs=[];const body=hasAny?zs.map(z=>{const zi=zoneItems(z);if(!zi.length)return'';let html=`<div class="el-outfit-zone"><div class="el-outfit-zone-title">${z.l}</div>`;zi.forEach((item,idx)=>{const key=z.id+'_'+idx;const ch=this._outfitChanges[key]||{};const removed=ch.action==='remove';const replacing=ch.action==='replace';chs.push(key);html+=`<div class="el-outfit-item${removed?' removed':''}"><div class="el-outfit-info"><span class="el-outfit-name">${this._esc(item.name)}</span>${item.desc&&item.desc!==item.name?`<span class="el-outfit-desc">${this._esc(item.desc)}</span>`:''}</div><div class="el-outfit-actions"><button class="el-outfit-btn${removed?' active':''}" onclick="window.VirtualPhone._erolinksView._toggleOutfit('${key}','remove')">脱下</button><button class="el-outfit-btn${replacing?' active':''}" onclick="window.VirtualPhone._erolinksView._toggleOutfit('${key}','replace')">更换</button></div>${replacing?`<div class="el-outfit-replace"><input class="el-outfit-input" id="el-outfit-input-${key}" placeholder="输入更换为..." value="${this._esc(ch.value||'')}" oninput="window.VirtualPhone._erolinksView._outfitChanges['${key}'].value=this.value"></div>`:''}</div>`;});html+='</div>';return html;}).join(''):`<div class="el-placeholder"><div class="el-placeholder-icon">👗</div><div>暂无服装数据</div></div>`;return`<div style="flex:1;display:flex;flex-direction:column;overflow:hidden;"><div class="el-outfit-scroll">${body}</div>${hasAny?`<div class="el-outfit-bottom"><button class="el-outfit-apply" onclick="window.VirtualPhone._erolinksView._applyOutfit()">📋 确定变更</button></div>`:''}</div>`;}
-_toggleOutfit(key,action){const cur=this._outfitChanges[key]||{};if(cur.action===action){delete this._outfitChanges[key];}else{cur.action=action;if(action==='replace'&&!cur.value)cur.value='';this._outfitChanges[key]=cur;}this.render();}
-_applyOutfit(){const parts=[];const o=this._linkedData?.outfit||{};Object.entries(this._outfitChanges).forEach(([key,ch])=>{const si=key.lastIndexOf('_');const zone=key.substring(0,si);const idx=parseInt(key.substring(si+1));const item=(o[zone]||[])[idx];if(!item)return;const nm=item.name||item;if(ch.action==='remove')parts.push('脱掉 '+nm);else if(ch.action==='replace'){const to=ch.value?.trim();if(to)parts.push('更换 '+nm+' 为 '+to);}});if(!parts.length)return;const ta=document.getElementById('send_textarea');if(ta){const cmd='发出命令：'+parts.join('，');ta.value=ta.value+(ta.value&&!ta.value.endsWith('\n')?'\n\n':'')+cmd;ta.dispatchEvent(new Event('input',{bubbles:true}));ta.focus();}this._outfitChanges={};this.render();}
-_parseOutfit(raw){if(!raw)return{};const result={head:[],neck:[],upper:[],hands:[],lower:[],legs:[],acc:[]};const lines=raw.split('\n');let cz='';let foundHeader=false;const getZone=z=>{if(z.includes('帽')||z.includes('头')||z.includes('发'))return'head';if(z.includes('脖')||z.includes('领'))return'neck';if(z.includes('上身')||z.includes('胸')||z.includes('衬')||z.includes('套')||z.includes('衣'))return'upper';if(z.includes('手'))return'hands';if(z.includes('下身')||z.includes('裙')||z.includes('裤'))return'lower';if(z.includes('腿')||z.includes('脚')||z.includes('袜')||z.includes('鞋'))return'legs';if(z.includes('饰')||z.includes('装'))return'acc';return'';};const classifyItem=n=>{const t=n.toLowerCase();if(t.includes('帽')||t.includes('发带')||t.includes('发绳')||t.includes('发夹')||t.includes('发饰')||t.includes('头巾')||t.includes('发型')||t.includes('辫')||t.includes('马尾'))return'head';if(t.includes('围脖')||t.includes('领带')||t.includes('领结')||t.includes('丝巾')||t.includes('项圈'))return'neck';if(t.includes('胸罩')||t.includes('内衣')||t.includes('外套')||t.includes('衬衣')||t.includes('衫')||t.includes('西服')||t.includes('夹克')||t.includes('背心')||t.includes('披肩'))return'upper';if(t.includes('手套'))return'hands';if(t.includes('内裤')||t.includes('裙子')||t.includes('裤')||t.includes('短裤'))return'lower';if(t.includes('袜')||t.includes('鞋')||t.includes('靴'))return'legs';if(t.includes('戒指')||t.includes('手镯')||t.includes('手环')||t.includes('耳环')||t.includes('项')||t.includes('背包')||t.includes('挂饰')||t.includes('脚环'))return'acc';return'';};const toItem=n=>{const pipe=n.indexOf('|');const name=pipe>=0?n.substring(0,pipe).trim():n;const desc=pipe>=0?n.substring(pipe+1).trim():n;return{name:name.replace(/（.*?）$/g,'').trim(),desc:desc.replace(/（.*?）$/g,'').trim()};};for(const line of lines){const t=line.trim();if(!t)continue;const m=t.match(/^【(.+?)】-?\s*(.*)/);if(m){cz=getZone(m[1]);foundHeader=true;const same=m[2]?.trim();if(same&&cz)result[cz].push(toItem(same));continue;}if(t.startsWith('-')){const n=t.replace(/^-\s*/,'').trim();if(n){if(!foundHeader)cz=classifyItem(n);if(cz)result[cz].push(toItem(n));}}}return result;}
+    _loadConfirmed(key) {
+        const text = Bridge.termGetString(key, '');
+        if (!text) return {};
+        const result = {};
+        String(text).split('\n').forEach((line) => {
+            const ci = line.indexOf('：');
+            if (ci > 0) result[line.substring(0, ci).trim()] = line.substring(ci + 1).trim();
+        });
+        return result;
+    }
 
-// === 催眠（UI占位） ===
-_renderHypnoTab(){const modes=[{k:'mind_ctrl',n:'意识催眠',d:'完全听从指令的人偶状态',i:'🧿'},{k:'body_ctrl',n:'身体控制',d:'控制身体动作但不控制思想',i:'🦾'},{k:'common_sense',n:'常识改变',d:'将指定内容植入为理所当然的常识',i:'💉'},{k:'sense_ctrl',n:'感官操控',d:'放大或压制特定感官敏感度',i:'👁'},{k:'emotion',n:'情绪注入',d:'注入特定情绪状态',i:'💫'},{k:'trigger',n:'触发词',d:'设定条件反射触发器',i:'🔑'},{k:'memory',n:'记忆修改',d:'植入或抑制特定记忆',i:'📝'},{k:'persona',n:'人格覆盖',d:'在现有性格上叠加临时人格',i:'🎭'}];return`<div class="el-hypno-scroll"><div class="el-hypno-grid">${modes.map(m=>`<div class="el-hypno-card" onclick="window.VirtualPhone._erolinksView._selectHypno('${m.k}')"><div class="el-hypno-card-icon">${m.i}</div><div class="el-hypno-card-name">${m.n}</div><div class="el-hypno-card-desc">${m.d}</div></div>`).join('')}</div></div>`;}
-_selectHypno(k){this.app.phoneShell?.showNotification?.('催眠',k+' 开发中...','🧠');}
+    _renderLinked() {
+        const d = this._linkedData;
+        return `<div class="erolinks-app"><div class="erolinks-bar"><div class="erolinks-bar-btn" onclick="window.NaviTerm.erolinksView._linkChar()">🔄</div><div class="erolinks-bar-btn" onclick="window.NaviTerm.erolinksView.goSettings()">⚙️</div></div><div class="el-tabs">${TABS.map((t) => `<div class="el-tab${this.activeTab === t.key ? ' active' : ''}" onclick="window.NaviTerm.erolinksView.switchTab('${t.key}')">${t.icon}</div>`).join('')}</div><div class="el-tab-content">${this._renderTabContent(d)}</div><div class="el-bottom-bar"><button class="el-disconnect-btn" onclick="window.NaviTerm.erolinksView.disconnect()">🔌 断开链接</button></div></div>`;
+    }
 
-// === 设置 ===
-_renderSettings(){const wbEnabled=window.VirtualPhone?.worldbookManager?.getEnabled?.('erolinks')??true;const promptContent=this._getLinkPrompt('[世界书内容]','[最后一条聊天记录]');const presetHtml=window.VirtualPhone?.promptManager?.renderPromptPresetControls?.('erolinks','link')||'';return`<div class="erolinks-app"><div class="erolinks-bar"><div class="erolinks-bar-btn" onclick="window.VirtualPhone._erolinksView.goBack()" style="margin-right:auto;">← 返回</div></div><div class="erolinks-scroll"><div class="erolinks-s-body"><div class="erolinks-s-section"><div class="erolinks-s-section-title">🔗 LINK 提示词</div>${presetHtml}<textarea id="erolinks-s-prompt" class="erolinks-s-textarea">${this._esc(promptContent)}</textarea><div class="erolinks-s-btn-row"><button class="erolinks-s-btn erolinks-s-btn-warn" id="erolinks-s-prompt-reset">恢复默认</button><button class="erolinks-s-btn erolinks-s-btn-primary" id="erolinks-s-prompt-save">保存提示词</button></div></div><div class="erolinks-s-section"><div class="erolinks-s-row"><span>📚 注入世界书</span><label class="toggle-switch" style="flex:0 0 auto;"><input type="checkbox" id="erolinks-use-worldbook" ${wbEnabled?'checked':''}><span class="toggle-slider"></span></label></div><div class="phone-prompt-fold erolinks-worldbook-fold" data-default-open="false" style="margin-top:10px;"><div class="phone-prompt-fold-header"><div class="phone-prompt-fold-main"><div class="phone-prompt-fold-title">世界书选择</div><div class="phone-prompt-fold-desc">展开后勾选要注入的酒馆世界书</div></div><i class="fa-solid fa-chevron-right phone-prompt-fold-arrow"></i></div><div class="phone-prompt-fold-content"><div id="erolinks-worldbook-list"></div></div></div></div></div></div></div>`;}
-_bindSettings(){const root=this.app.phoneShell.screen;if(!root)return;root.querySelector('#erolinks-s-prompt-save')?.addEventListener('click',()=>{const val=root.querySelector('#erolinks-s-prompt')?.value||'';try{window.VirtualPhone?.promptManager?.updateActivePromptUserPreset('erolinks','link',val);this.app.phoneShell?.showNotification?.('已保存','','✅');}catch(e){this.app.phoneShell?.showNotification?.('保存失败',e.message,'❌');}});root.querySelector('#erolinks-s-prompt-reset')?.addEventListener('click',()=>{if(!confirm('恢复默认提示词？'))return;const content=window.VirtualPhone?.promptManager?.resetPromptToDefault('erolinks','link');const ta=root.querySelector('#erolinks-s-prompt');if(ta&&content)ta.value=content;this.app.phoneShell?.showNotification?.('已恢复','','✅');});window.VirtualPhone?.promptManager?.bindPromptPresetControls?.(document.querySelector('.phone-view-current .erolinks-s-body')||document,'erolinks','link','#erolinks-s-prompt',{notify:(t,m,i)=>this.app.phoneShell?.showNotification?.(t,m,i)});const wbToggle=root.querySelector('#erolinks-use-worldbook');wbToggle?.addEventListener('change',()=>{window.VirtualPhone?.worldbookManager?.setEnabled('erolinks',wbToggle.checked);if(wbToggle.checked&&!this._wbRendered)this._renderWBList();});if(wbToggle?.checked)this._renderWBList();root.querySelectorAll('.phone-prompt-fold').forEach(fold=>{if(fold.dataset.foldInited!=='1'){fold.dataset.foldInited='1';fold.classList.toggle('is-open',String(fold.dataset.defaultOpen||'').toLowerCase()==='true');}});root.querySelectorAll('.phone-prompt-fold-header').forEach(header=>{if(header.dataset.foldBound==='1')return;header.dataset.foldBound='1';header.addEventListener('click',()=>{const fold=header.closest('.phone-prompt-fold');if(fold)fold.classList.toggle('is-open');});});}
-async _renderWBList(){const container=document.getElementById('erolinks-worldbook-list');const mgr=window.VirtualPhone?.worldbookManager;if(!container||!mgr)return;this._wbRendered=true;try{const sources=await mgr.listAvailableWorldbooks({includeEntries:true,force:true});const sel=mgr.getSelectionState('erolinks');if(!sources?.length){container.innerHTML='<div style="font-size:11px;color:#888;padding:6px 0;">未读取到酒馆世界书列表</div>';return;}const sorted=[...sources].sort((a,b)=>{const aS=sel.initialized&&mgr.matchesSelection?.(a,sel.ids)?1:0;const bS=sel.initialized&&mgr.matchesSelection?.(b,sel.ids)?1:0;return bS-aS;});container.innerHTML=sorted.map(s=>{const checked=sel.initialized&&mgr.matchesSelection?.(s,sel.ids)?'checked':'';const active=Number(s.entries?.length||0);const total=Number(s.totalEntries??active);return`<label class="erolinks-wb-item"><input type="checkbox" class="erolinks-wb-cb" value="${this._esc(s.id)}" ${checked}><span class="erolinks-wb-name">${this._esc(s.name)}</span><span class="erolinks-wb-meta">${total>active?active+'/'+total+' 条':active+' 条'}</span></label>`;}).join('');container.querySelectorAll('.erolinks-wb-cb').forEach(cb=>{cb.addEventListener('change',()=>{const ids=[];container.querySelectorAll('.erolinks-wb-cb').forEach(c=>{if(c.checked)ids.push(c.value);});mgr.setSelection('erolinks',ids);});});}catch(e){container.innerHTML='<div style="font-size:11px;color:#d93025;padding:6px 0;">世界书读取失败</div>';}}}
+    _renderTabContent(d) {
+        switch (this.activeTab) {
+            case 'info': return this._renderInfoTab(d);
+            case 'secret': return this._renderSecretTab(d);
+            case 'outfit': return this._renderOutfitTab();
+            case 'hypno': return this._renderHypnoTab();
+            default: return '';
+        }
+    }
+
+    _renderInfoTab(d) {
+        return `<div class="el-info-scroll"><div class="el-avatar-area"><div class="el-avatar-ring"><div class="el-avatar-inner">${this._esc(d.charName).charAt(0)}</div></div><div class="el-char-name">${this._esc(d.charName)}</div></div><div class="el-info-grid"><div class="el-info-item"><span class="el-info-label">种族</span><span class="el-info-val">${this._esc(d.race || '—')}</span></div><div class="el-info-item"><span class="el-info-label">年龄</span><span class="el-info-val">${this._esc(d.age || '—')}</span></div><div class="el-info-item"><span class="el-info-label">身份</span><span class="el-info-val">${this._esc(d.role || '—')}</span></div><div class="el-info-item"><span class="el-info-label">所属</span><span class="el-info-val">${this._esc(d.affiliation || '—')}</span></div></div><div style="display:flex;gap:6px;margin-bottom:8px;"><div class="el-heartrate-card" style="flex:1;"><div class="el-hr-icon">💓</div><div class="el-hr-value">${this._esc(d.heartRate || '72')}</div><div class="el-hr-unit">BPM</div><div class="el-hr-wave"></div></div><div class="el-heartrate-card" style="flex:1;border-color:rgba(255,140,60,0.15);background:rgba(255,140,60,0.06);"><div class="el-hr-icon" style="color:#ff8c40;">🌡</div><div class="el-hr-value" style="color:#ff8c40;">${this._esc(d.temp || '36.5')}</div><div class="el-hr-unit">°C</div></div></div><div class="el-info-grid"><div class="el-info-item"><span class="el-info-label">状态</span><span class="el-info-val">${this._esc(d.mood || '—')}</span></div><div class="el-info-item"><span class="el-info-label">活动</span><span class="el-info-val">${this._esc(d.activity || '—')}</span></div><div class="el-info-item"><span class="el-info-label">位置</span><span class="el-info-val">${this._esc(d.location || '—')}</span></div><div class="el-info-item"><span class="el-info-label">好感</span><span class="el-info-val">${this._esc(d.favorability || '—')}</span></div></div>${d.thought ? `<div class="el-thought"><div class="el-thought-label">💭</div><div class="el-thought-text">${this._esc(d.thought)}</div></div>` : ''}</div>`;
+    }
+
+    _renderSecretTab(d) {
+        return `<div class="el-secret-scroll"><div class="el-secret-section"><div class="el-secret-section-title">🔞 胸穴状态</div><div class="el-secret-grid"><div class="el-secret-item wide"><span class="el-secret-label">胸部</span><span class="el-secret-val">${this._esc(d.breast || '—')}</span></div><div class="el-secret-item wide"><span class="el-secret-label">小穴</span><span class="el-secret-val">${this._esc(d.vulva || '—')}</span></div></div></div><div class="el-secret-section"><div class="el-secret-section-title">📊 性经验</div><div class="el-secret-grid"><div class="el-secret-item"><span class="el-secret-label">经验</span><span class="el-secret-val">${this._esc(d.sexExp || '—')}</span></div><div class="el-secret-item"><span class="el-secret-label">最近</span><span class="el-secret-val">${this._esc(d.lastSex || '—')}</span></div><div class="el-secret-item"><span class="el-secret-label">自慰频率</span><span class="el-secret-val">${this._esc(d.mastFreq || '—')}</span></div><div class="el-secret-item"><span class="el-secret-label">最近自慰</span><span class="el-secret-val">${this._esc(d.lastMast || '—')}</span></div></div></div><div class="el-secret-section"><div class="el-secret-section-title">🌡 生理</div><div class="el-secret-grid"><div class="el-secret-item"><span class="el-secret-label">敏感</span><span class="el-secret-val">${this._esc(d.sensitive || '—')}</span></div><div class="el-secret-item"><span class="el-secret-label">湿润</span><span class="el-secret-val">${this._esc(d.wetness || '—')}</span></div><div class="el-secret-item"><span class="el-secret-label">快感阶段</span><span class="el-secret-val">${this._esc(d.arousal || '—')}</span></div><div class="el-secret-item"><span class="el-secret-label">周期</span><span class="el-secret-val">${this._esc(d.cycle || '—')}</span></div></div></div><div class="el-secret-section"><div class="el-secret-section-title">💭 欲望</div><div class="el-secret-grid"><div class="el-secret-item wide"><span class="el-secret-label">欲望</span><span class="el-secret-val">${this._esc(d.desire || '—')}</span></div><div class="el-secret-item wide"><span class="el-secret-label">幻想</span><span class="el-secret-val">${this._esc(d.fantasy || '—')}</span></div><div class="el-secret-item wide"><span class="el-secret-label">嗜好</span><span class="el-secret-val">${this._esc(d.kink || '—')}</span></div><div class="el-secret-item wide"><span class="el-secret-label">身体变化</span><span class="el-secret-val">${this._esc(d.bodyChange || '—')}</span></div></div></div></div>`;
+    }
+
+    _renderOutfitTab() {
+        const o = this._linkedData?.outfit || {};
+        const zs = [
+            { id: 'head', l: '👒 头部' },
+            { id: 'neck', l: '🧣 脖子' },
+            { id: 'upper', l: '👚 上身躯体' },
+            { id: 'hands', l: '🧤 双手' },
+            { id: 'lower', l: '👖 下身躯体' },
+            { id: 'legs', l: '🦵 腿脚' },
+            { id: 'acc', l: '💍 装饰' }
+        ];
+        const zoneItems = (z) => o[z.id] || [];
+        const hasAny = Object.values(o).some((a) => a.length > 0);
+        const body = hasAny
+            ? zs.map((z) => {
+                const zi = zoneItems(z);
+                if (!zi.length) return '';
+                let html = `<div class="el-outfit-zone"><div class="el-outfit-zone-title">${z.l}</div>`;
+                zi.forEach((item, idx) => {
+                    const key = z.id + '_' + idx;
+                    const ch = this._outfitChanges[key] || {};
+                    const removed = ch.action === 'remove';
+                    const replacing = ch.action === 'replace';
+                    html += `<div class="el-outfit-item${removed ? ' removed' : ''}"><div class="el-outfit-info"><span class="el-outfit-name">${this._esc(item.name)}</span>${item.desc && item.desc !== item.name ? `<span class="el-outfit-desc">${this._esc(item.desc)}</span>` : ''}</div><div class="el-outfit-actions"><button class="el-outfit-btn${removed ? ' active' : ''}" onclick="window.NaviTerm.erolinksView._toggleOutfit('${key}','remove')">脱下</button><button class="el-outfit-btn${replacing ? ' active' : ''}" onclick="window.NaviTerm.erolinksView._toggleOutfit('${key}','replace')">更换</button></div>${replacing ? `<div class="el-outfit-replace"><input class="el-outfit-input" id="el-outfit-input-${key}" placeholder="输入更换为..." value="${this._esc(ch.value || '')}" oninput="window.NaviTerm.erolinksView._outfitChanges['${key}'].value=this.value"></div>` : ''}</div>`;
+                });
+                html += '</div>';
+                return html;
+            }).join('')
+            : `<div class="el-placeholder"><div class="el-placeholder-icon">👗</div><div>暂无服装数据</div></div>`;
+        return `<div style="flex:1;display:flex;flex-direction:column;overflow:hidden;"><div class="el-outfit-scroll">${body}</div>${hasAny ? `<div class="el-outfit-bottom"><button class="el-outfit-apply" onclick="window.NaviTerm.erolinksView._applyOutfit()">📋 确定变更</button></div>` : ''}</div>`;
+    }
+
+    _toggleOutfit(key, action) {
+        const cur = this._outfitChanges[key] || {};
+        if (cur.action === action) {
+            delete this._outfitChanges[key];
+        } else {
+            cur.action = action;
+            if (action === 'replace' && !cur.value) cur.value = '';
+            this._outfitChanges[key] = cur;
+        }
+        this.render();
+    }
+
+    _applyOutfit() {
+        const parts = [];
+        const o = this._linkedData?.outfit || {};
+        Object.entries(this._outfitChanges).forEach(([key, ch]) => {
+            const si = key.lastIndexOf('_');
+            const zone = key.substring(0, si);
+            const idx = parseInt(key.substring(si + 1), 10);
+            const item = (o[zone] || [])[idx];
+            if (!item) return;
+            const nm = item.name || item;
+            if (ch.action === 'remove') parts.push('脱掉 ' + nm);
+            else if (ch.action === 'replace') {
+                const to = ch.value?.trim();
+                if (to) parts.push('更换 ' + nm + ' 为 ' + to);
+            }
+        });
+        if (!parts.length) return;
+        const cmd = '发出命令：' + parts.join('，');
+        if (!Bridge.appendToChatInput(cmd)) {
+            this.app.phoneShell?.showNotification?.('写入失败', '未找到输入框', '❌');
+            return;
+        }
+        this._outfitChanges = {};
+        this.render();
+        this.app.phoneShell?.showNotification?.('已写入输入框', '', '✅');
+    }
+
+    _parseOutfit(raw) {
+        if (!raw) return {};
+        const result = { head: [], neck: [], upper: [], hands: [], lower: [], legs: [], acc: [] };
+        const lines = raw.split('\n');
+        let cz = '';
+        const getZone = (z) => {
+            if (z.includes('帽') || z.includes('头') || z.includes('发')) return 'head';
+            if (z.includes('脖') || z.includes('领')) return 'neck';
+            if (z.includes('上身') || z.includes('胸') || z.includes('衬') || z.includes('套') || z.includes('衣') || z.includes('罩')) return 'upper';
+            if (z.includes('手')) return 'hands';
+            if (z.includes('下身') || z.includes('裙') || z.includes('裤')) return 'lower';
+            if (z.includes('腿') || z.includes('脚') || z.includes('袜') || z.includes('鞋')) return 'legs';
+            if (z.includes('饰') || z.includes('装')) return 'acc';
+            return '';
+        };
+        const toItem = (n) => {
+            const pipe = n.indexOf('|');
+            const name = pipe >= 0 ? n.substring(0, pipe).trim() : n;
+            const desc = pipe >= 0 ? n.substring(pipe + 1).trim() : n;
+            return {
+                name: name.replace(/（.*?）$/g, '').trim(),
+                desc: desc.replace(/（.*?）$/g, '').trim()
+            };
+        };
+        const pushItem = (zone, text) => {
+            if (!zone || !text) return;
+            const t = text.replace(/^-\s*/, '').trim();
+            if (!t || t === '无' || t === '无。') return;
+            result[zone].push(toItem(t));
+        };
+        for (const line of lines) {
+            const t = line.trim();
+            if (!t) continue;
+            const m = t.match(/^【(.+?)】-?\s*(.*)/);
+            if (m) {
+                cz = getZone(m[1]) || cz;
+                const same = m[2]?.trim();
+                if (same) pushItem(cz || getZone(m[1]), same);
+                continue;
+            }
+            if (t.startsWith('-')) pushItem(cz, t);
+        }
+        return result;
+    }
+
+    _renderHypnoTab() {
+        const modes = [
+            { k: 'mind_ctrl', n: '意识催眠', d: '完全听从指令的人偶状态', i: '🧿' },
+            { k: 'body_ctrl', n: '身体控制', d: '控制身体动作但不控制思想', i: '🦾' },
+            { k: 'common_sense', n: '常识改变', d: '将指定内容植入为理所当然的常识', i: '💉' },
+            { k: 'sense_ctrl', n: '感官操控', d: '放大或压制特定感官敏感度', i: '👁' },
+            { k: 'emotion', n: '情绪注入', d: '注入特定情绪状态', i: '💫' },
+            { k: 'trigger', n: '触发词', d: '设定条件反射触发器', i: '🔑' },
+            { k: 'memory', n: '记忆修改', d: '植入或抑制特定记忆', i: '📝' },
+            { k: 'persona', n: '人格覆盖', d: '在现有性格上叠加临时人格', i: '🎭' }
+        ];
+        return `<div class="el-hypno-scroll"><div class="el-hypno-grid">${modes.map((m) => `<div class="el-hypno-card" onclick="window.NaviTerm.erolinksView._selectHypno('${m.k}')"><div class="el-hypno-card-icon">${m.i}</div><div class="el-hypno-card-name">${m.n}</div><div class="el-hypno-card-desc">${m.d}</div></div>`).join('')}</div></div>`;
+    }
+
+    _selectHypno(k) {
+        this.app.phoneShell?.showNotification?.('催眠', k + ' 开发中...', '🧠');
+    }
+
+    _renderSettings() {
+        const wbEnabled = Bridge.getWorldbookEnabled('erolinks', true);
+        const promptContent = Bridge.getTermPrompt(
+            'erolinks',
+            'link',
+            this._getDefaultLinkPrompt('[世界书内容]', '[最后一条聊天记录]')
+        );
+        const bridgeStatus = Bridge.describeReadiness();
+        return `<div class="erolinks-app"><div class="erolinks-bar"><div class="erolinks-bar-btn" onclick="window.NaviTerm.erolinksView.goBack()" style="margin-right:auto;">← 返回</div></div><div class="erolinks-scroll"><div class="erolinks-s-body">
+            <div class="erolinks-s-section"><div class="erolinks-s-section-title">🔌 桥接状态</div><div style="font-size:12px;color:${bridgeStatus.level === 'ok' ? '#52c41a' : bridgeStatus.level === 'warn' ? '#faad14' : '#ff4d4f'}">${this._esc(bridgeStatus.message)}</div></div>
+            <div class="erolinks-s-section"><div class="erolinks-s-section-title">🔗 LINK 提示词</div><textarea id="erolinks-s-prompt" class="erolinks-s-textarea">${this._esc(promptContent)}</textarea><div class="erolinks-s-btn-row"><button class="erolinks-s-btn erolinks-s-btn-warn" id="erolinks-s-prompt-reset">恢复默认</button><button class="erolinks-s-btn erolinks-s-btn-primary" id="erolinks-s-prompt-save">保存提示词</button></div></div>
+            <div class="erolinks-s-section"><div class="erolinks-s-row"><span>📚 注入世界书</span><label class="toggle-switch" style="flex:0 0 auto;"><input type="checkbox" id="erolinks-use-worldbook" ${wbEnabled ? 'checked' : ''}><span class="toggle-slider"></span></label></div>
+            <div class="nt-fold erolinks-worldbook-fold" data-default-open="false" style="margin-top:10px;"><div class="nt-fold-header"><div class="nt-fold-main"><div class="nt-fold-title">世界书选择</div><div class="nt-fold-desc">展开后勾选要注入的酒馆世界书</div></div><span class="nt-fold-arrow">›</span></div><div class="nt-fold-content"><div id="erolinks-worldbook-list"></div></div></div>
+            </div>
+        </div></div></div>`;
+    }
+
+    _bindSettings() {
+        const root = this.app.phoneShell.screen;
+        if (!root) return;
+
+        root.querySelector('#erolinks-s-prompt-save')?.addEventListener('click', () => {
+            const val = root.querySelector('#erolinks-s-prompt')?.value || '';
+            try {
+                Bridge.setTermPrompt('erolinks', 'link', val, { customized: true });
+                this.app.phoneShell?.showNotification?.('已保存', '', '✅');
+            } catch (e) {
+                this.app.phoneShell?.showNotification?.('保存失败', e.message, '❌');
+            }
+        });
+
+        root.querySelector('#erolinks-s-prompt-reset')?.addEventListener('click', () => {
+            if (!confirm('恢复默认提示词？')) return;
+            const content = this._getDefaultLinkPrompt('[世界书内容]', '[最后一条聊天记录]');
+            const ta = root.querySelector('#erolinks-s-prompt');
+            if (ta) ta.value = content;
+            Bridge.resetTermPrompt('erolinks', 'link', content);
+            this.app.phoneShell?.showNotification?.('已恢复', '', '✅');
+        });
+
+        const wbToggle = root.querySelector('#erolinks-use-worldbook');
+        wbToggle?.addEventListener('change', () => {
+            Bridge.setWorldbookEnabled('erolinks', wbToggle.checked);
+            if (wbToggle.checked && !this._wbRendered) this._renderWBList();
+        });
+        if (wbToggle?.checked) this._renderWBList();
+
+        root.querySelectorAll('.nt-fold').forEach((fold) => {
+            if (fold.dataset.foldInited === '1') return;
+            fold.dataset.foldInited = '1';
+            fold.classList.toggle('is-open', String(fold.dataset.defaultOpen || '').toLowerCase() === 'true');
+            fold.querySelector('.nt-fold-header')?.addEventListener('click', () => fold.classList.toggle('is-open'));
+        });
+    }
+
+    async _renderWBList() {
+        const container = document.getElementById('erolinks-worldbook-list');
+        const mgr = Bridge.getWorldbookManager();
+        if (!container) return;
+        this._wbRendered = true;
+        if (!mgr?.listAvailableWorldbooks) {
+            container.innerHTML = '<div style="font-size:11px;color:#888;padding:6px 0;">世界书桥接不可用</div>';
+            return;
+        }
+        try {
+            const sources = await mgr.listAvailableWorldbooks({ includeEntries: true, force: true });
+            const sel = mgr.getSelectionState?.('erolinks') || { initialized: false, ids: [] };
+            if (!sources?.length) {
+                container.innerHTML = '<div style="font-size:11px;color:#888;padding:6px 0;">未读取到酒馆世界书列表</div>';
+                return;
+            }
+            const sorted = [...sources].sort((a, b) => {
+                const aS = sel.initialized && mgr.matchesSelection?.(a, sel.ids) ? 1 : 0;
+                const bS = sel.initialized && mgr.matchesSelection?.(b, sel.ids) ? 1 : 0;
+                return bS - aS;
+            });
+            container.innerHTML = sorted.map((s) => {
+                const checked = sel.initialized && mgr.matchesSelection?.(s, sel.ids) ? 'checked' : '';
+                const active = Number(s.entries?.length || 0);
+                const total = Number(s.totalEntries ?? active);
+                return `<label class="erolinks-wb-item"><input type="checkbox" class="erolinks-wb-cb" value="${this._esc(s.id)}" ${checked}><span class="erolinks-wb-name">${this._esc(s.name)}</span><span class="erolinks-wb-meta">${total > active ? active + '/' + total + ' 条' : active + ' 条'}</span></label>`;
+            }).join('');
+            container.querySelectorAll('.erolinks-wb-cb').forEach((cb) => {
+                cb.addEventListener('change', () => {
+                    const ids = [];
+                    container.querySelectorAll('.erolinks-wb-cb').forEach((c) => {
+                        if (c.checked) ids.push(c.value);
+                    });
+                    try { mgr.setSelection?.('erolinks', ids); } catch (e) {
+                        this.app.phoneShell?.showNotification?.('世界书选择失败', e.message, '❌');
+                    }
+                });
+            });
+        } catch (e) {
+            container.innerHTML = '<div style="font-size:11px;color:#d93025;padding:6px 0;">世界书读取失败</div>';
+        }
+    }
+}

@@ -1,4 +1,8 @@
-/* N.A.V.I. 观测委托 — 独立提示词（不依赖 yuzuki-phone-main） */
+/* N.A.V.I. 观测委托 — 独立提示词（经 bridge 自持存储，不强依赖手机 phone-prompts） */
+import { ensurePromptDefaults, PROMPT_STORE_VERSION } from '../../bridge.js';
+
+export const NAVI_PROMPTS_VERSION = 3;
+
 export const NAVI_DEFAULTS = {
     observation: {
         enabled: true,
@@ -132,23 +136,7 @@ export const NAVI_DEFAULTS = {
     }
 };
 
-/** 确保障 navi 提示词已注册到 promptManager 的存储中 */
-export function ensureNaviPrompts(storage) {
-    if (!storage) return;
-    const raw = storage.get('phone-prompts', null);
-    let prompts = {};
-    if (raw) {
-        try { prompts = JSON.parse(raw); } catch (e) { prompts = {}; }
-    }
-    if (!prompts.navi) prompts.navi = {};
-    let changed = false;
-    for (const [feature, def] of Object.entries(NAVI_DEFAULTS)) {
-        if (!prompts.navi[feature]) {
-            prompts.navi[feature] = { ...def };
-            changed = true;
-        }
-    }
-    if (changed) {
-        storage.set('phone-prompts', JSON.stringify(prompts));
-    }
+/** 注册/升级 navi 提示词到终端自持存储（并软同步手机） */
+export function ensureNaviPrompts() {
+    ensurePromptDefaults('navi', NAVI_DEFAULTS, Math.max(PROMPT_STORE_VERSION, NAVI_PROMPTS_VERSION));
 }
