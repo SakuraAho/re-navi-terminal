@@ -653,9 +653,10 @@ export class NaviView {
 
     _buildExportText(c, type) {
         const modeName = c.mode === 'play' ? '把玩' : '观测';
-        const site = c.site ? ` · ${c.site}` : (c.playTag ? ` · ${c.playTag}` : '');
-        if (type === 'system') {
-            const who = c.target || '（未指定对象）';
+        const site = (c.siteFocus || c.site)
+            ? ` · ${c.siteFocus || c.site}`
+            : (c.playTag ? ` · ${c.playTag}` : '');
+        const who = c.target || '（未指定对象）';
         const focus = c.siteFocus || c.site || '';
         if (type === 'system') {
             return `【N.A.V.I. ${modeName}委托 · ${c.difficulty}${site}】
