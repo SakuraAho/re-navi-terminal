@@ -14,13 +14,16 @@ import { NAVI_DEFAULTS } from './navi-prompts.js';
 import * as Store from './navi-store.js';
 
 const SITE_ICONS = { 胸部: '🍈', 小穴: '🍑', 综合: '💗' };
-const DIFF_LABELS_OBS = ['简单', '中等', '困难'];
+const DIFF_LABELS_OBS = ['静观', '诱导', '精测'];
 const DIFF_LABELS_PLAY = ['轻度把玩', '沉浸把玩', '深度交互'];
 const DIFF_COLORS = {
+    静观: '#52c41a', 诱导: '#faad14', 精测: '#ff4d4f',
+    // 兼容旧数据
     简单: '#52c41a', 中等: '#faad14', 困难: '#ff4d4f',
     轻度把玩: '#7c3aed', 沉浸把玩: '#db2777', 深度交互: '#dc2626'
 };
 const DIFF_ICONS = {
+    静观: '👁', 诱导: '🧭', 精测: '📐',
     简单: '🟢', 中等: '🟡', 困难: '🔴',
     轻度把玩: '💜', 沉浸把玩: '💗', 深度交互: '❤️'
 };
@@ -237,7 +240,7 @@ export class NaviView {
                 </div>
             </div>
             <div class="navi-section">
-                <div class="navi-section-title">选择难度生成</div>
+                <div class="navi-section-title">${this.mode === 'observation' ? '观察深度' : '交互尺度'}</div>
                 <div class="navi-diff-buttons">
                     ${diffLabels.map((d) => {
                         const loading = this._generating === d;
@@ -247,7 +250,11 @@ export class NaviView {
                         </button>`;
                     }).join('')}
                 </div>
-                <div class="navi-hint">生成成功后会追加进委托板，可随时从首页查看/导出。</div>
+                <div class="navi-hint">${this.mode === 'observation'
+                    ? '👁静观：只看/摆姿态　🧭诱导：动作与条件制造可见　📐精测：可引导手触做形态测量（非把玩）'
+                    : '💜轻度：浅触　💗沉浸：敏感区/X交/放尿等　❤️深度：插入·玩具·SM·高潮'
+                }</div>
+                <div class="navi-hint">生成成功后追加进委托板，不覆盖旧单。</div>
             </div>
         </div></div>`;
     }
@@ -457,8 +464,8 @@ export class NaviView {
         }
 
         const userMsg = feature === 'observation'
-            ? `请生成恰好${n}个${difficulty}难度的观测委托。`
-            : `请生成恰好${n}个${difficulty}的把玩委托。`;
+            ? `请严格按【${difficulty}】档生成恰好${n}个观测委托任务单（观察肉体形态；非把玩）。`
+            : `请严格按【${difficulty}】档生成恰好${n}个把玩委托任务单（触摸与亲身体验）。`;
 
         const result = await Bridge.callPhoneAI(
             [

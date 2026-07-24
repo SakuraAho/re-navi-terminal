@@ -3,7 +3,7 @@
     "name": "navi-terminal-ext",
     "description": "N.A.V.I.体己师观测终端独立扩展面板——观测委托板、EroLinks身心链接。依赖 yuzuki-phone。",
     "author": "SakuraAho (NAVI改装)",
-    "version": "2.2.1",
+    "version": "2.2.2",
     "loading_order": 201,
     "requires": [],
     "optional": [],
