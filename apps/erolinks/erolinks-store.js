@@ -166,7 +166,7 @@ export function matchOutfitSlotId(header) {
 export function clarifyGarmentName(slotLabel, name, desc) {
     let n = String(name || '').trim();
     const d = String(desc || '').trim();
-    if (!n || n === '未穿着' || n === '待确认' || n === '无') return n;
+    if (!n || n === '未穿着' || n === '待确认' || n === '无' || n === '保持' || /^保持/.test(n)) return n;
     if (slotLabel === '发型') return n;
     const typeRe = /衣|裙|裤|袜|鞋|靴|帽|罩|衫|袖|巾|带|饰|手套|外套|内衣|内裤|文胸|夹克|大衣|T恤|卫衣/;
     if (!typeRe.test(n) && slotLabel && !n.includes(slotLabel)) {
@@ -197,10 +197,11 @@ export function normalizeOutfit(outfit) {
         const arr = Array.isArray(outfit[slot.id]) ? outfit[slot.id] : [];
         base[slot.id] = arr.map((it) => {
             const st = normalizeOutfitSlot(it);
-            if (st.bare || st.pending || st.hair) return st;
+            // keep/bare/pending/hair 都原样保留，绝不能把「保持」拼成「保持裙子」
+            if (st.keep || st.bare || st.pending || st.hair) return st;
             const name = clarifyGarmentName(slot.label, st.name, st.desc);
             return { ...st, name, slotLabel: slot.label };
-        });
+        }).filter((it) => it && !it.keep); // 规范化结果里不落盘「保持」字面量
     });
     // 旧 zone → 迁入细槽（仅当细槽仍空）
     const legacyMap = {
@@ -217,40 +218,53 @@ export function normalizeOutfit(outfit) {
         if (!arr.length) return;
         const allEmpty = ids.every((id) => !base[id]?.length);
         if (!allEmpty) return;
-        // 无法细分时放入第一个非发型槽
         const target = ids.find((id) => id !== 'hair') || ids[0];
         const slot = OUTFIT_SLOTS.find((s) => s.id === target);
         base[target] = arr.map((it) => {
             const st = normalizeOutfitSlot(it);
-            if (st.bare || st.pending || st.hair) return st;
+            if (st.keep || st.bare || st.pending || st.hair) return st;
             return { ...st, name: clarifyGarmentName(slot?.label || '', st.name, st.desc), slotLabel: slot?.label || '' };
-        });
+        }).filter((it) => it && !it.keep);
     });
     return base;
 }
 
-/** 分区合并：patch 为「保持」或空 → 保留 base；明确变更才覆盖 */
+/**
+ * 分区合并（增量刷新核心）：
+ * - patch 空 / 全是 keep → 100% 沿用 base 原值（界面仍显示原来的裙子，绝不是字面「保持」）
+ * - patch 有真实变更 → 用变更结果
+ */
 export function mergeOutfit(baseOutfit, patchOutfit) {
     const b = normalizeOutfit(baseOutfit);
-    const p = normalizeOutfit(patchOutfit);
-    if (!outfitHasItems(p)) return b;
+    // 合并前先识别 keep，不能先 normalize 掉 keep
+    const pRaw = patchOutfit && typeof patchOutfit === 'object' ? patchOutfit : {};
     const out = emptyOutfit();
     OUTFIT_SLOTS.forEach((slot) => {
         const id = slot.id;
-        const patchArr = p[id] || [];
         const baseArr = b[id] || [];
-        if (!patchArr.length) {
+        const rawArr = Array.isArray(pRaw[id]) ? pRaw[id] : [];
+        if (!rawArr.length) {
             out[id] = baseArr;
             return;
         }
-        // 整槽都是「保持」→ 沿用旧
-        if (patchArr.every((it) => it.keep || it.name === '保持')) {
-            out[id] = baseArr.length ? baseArr : patchArr;
+        const slots = rawArr.map(normalizeOutfitSlot);
+        if (slots.every((it) => it.keep || /^保持/.test(String(it.name || '')))) {
+            out[id] = baseArr;
             return;
         }
-        // 过滤 keep 项后写入；若过滤后为空则沿用旧
-        const changed = patchArr.filter((it) => !it.keep && it.name !== '保持');
-        out[id] = changed.length ? changed : baseArr;
+        const changed = slots.filter((it) => !it.keep && !/^保持/.test(String(it.name || '')));
+        if (!changed.length) {
+            out[id] = baseArr;
+            return;
+        }
+        out[id] = changed.map((st) => {
+            if (st.bare || st.pending || st.hair) return st;
+            return {
+                ...st,
+                name: clarifyGarmentName(slot.label, st.name, st.desc),
+                slotLabel: slot.label
+            };
+        });
     });
     return out;
 }
@@ -414,8 +428,11 @@ export function outfitSlotState(item) {
     const desc = String(item.desc || '').trim();
     const raw = (name + ' ' + desc).trim();
     if (!raw) return { state: 'pending', name: '待确认', desc: '' };
-    // 刷新时「保持」= 客户端沿用旧值，不覆盖
-    if (raw === '保持' || raw === '不变' || raw === '无变更' || /^保持原/.test(raw)) {
+    // 刷新时「保持」= 仅合并标记，禁止展示、禁止写进档案外观
+    if (
+        raw === '保持' || raw === '不变' || raw === '无变更'
+        || /^保持/.test(raw) || raw.endsWith('保持')
+    ) {
         return { state: 'keep', name: '保持', desc: '' };
     }
     // 明确未穿着（世界书/正文写明无衣）

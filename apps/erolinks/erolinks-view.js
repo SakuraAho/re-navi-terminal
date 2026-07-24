@@ -669,6 +669,11 @@ ${oSnap}
             let html = `<div class="el-outfit-zone"><div class="el-outfit-zone-title">${this._esc(slot.label)}</div>`;
             items.forEach((item, idx) => {
                 const st = EStore.outfitSlotState(item);
+                // 不应展示「保持」字面量；若档案被污染则当待确认
+                if (st.state === 'keep' || /^保持/.test(String(item?.name || ''))) {
+                    html += `<div class="el-outfit-item"><div class="el-outfit-info"><span class="el-outfit-name">待确认</span><span class="el-outfit-tag">数据需刷新</span></div></div>`;
+                    return;
+                }
                 const key = slot.id + '_' + idx;
                 if (slot.hair || st.state === 'hair' || item.hair) {
                     const nm = st.name || item.name || '发型';
