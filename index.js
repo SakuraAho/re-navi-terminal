@@ -5,7 +5,7 @@
 
 import Bridge from './bridge.js';
 
-const TERM_VERSION = '2.5.8';
+const TERM_VERSION = '2.6.0';
 const TERM_BASE = new URL('./', import.meta.url).href;
 
 if (window.NAVI_TERM_LOADED) {
@@ -19,6 +19,7 @@ window.NaviTerm = Object.assign(window.NaviTerm || {}, {
     bridge: Bridge,
     naviView: null,
     erolinksView: null,
+    playbookView: null,
     currentApp: null,
     currentAppId: null,
     panelOpen: false
@@ -136,6 +137,10 @@ function togglePanel() {
                             <div class="nt-app-icon">🔗</div>
                             <div class="nt-app-name">EroLinks</div>
                         </div>
+                        <div class="nt-app-card" data-app="playbook">
+                            <div class="nt-app-icon">📗</div>
+                            <div class="nt-app-name">玩法集</div>
+                        </div>
                     </div>
                     <div class="nt-home-meta">v${TERM_VERSION} · bridge ${Bridge.version}</div>
                 </div>
@@ -199,11 +204,6 @@ class TermShell {
     }
 }
 
-const appModules = {
-    navi: './apps/navi/navi-app.js',
-    erolinks: './apps/erolinks/erolinks-app.js'
-};
-
 function goHome() {
     const homeEl = document.getElementById('navi-term-home');
     const appEl = document.getElementById('navi-term-app');
@@ -218,8 +218,27 @@ function goHome() {
     window.NaviTerm.currentAppId = null;
     window.NaviTerm.naviView = null;
     window.NaviTerm.erolinksView = null;
+    window.NaviTerm.playbookView = null;
     refreshHomeStatus();
 }
+
+const appModules = {
+    navi: './apps/navi/navi-app.js',
+    erolinks: './apps/erolinks/erolinks-app.js',
+    playbook: './apps/playbook/playbook-app.js'
+};
+
+const APP_TITLES = {
+    navi: '🎯 观测委托',
+    erolinks: '🔗 EroLinks',
+    playbook: '📗 玩法集'
+};
+
+const APP_CLASS = {
+    navi: 'NaviApp',
+    erolinks: 'EroLinksApp',
+    playbook: 'PlaybookApp'
+};
 
 async function openApp(appId) {
     const homeEl = document.getElementById('navi-term-home');
@@ -229,16 +248,19 @@ async function openApp(appId) {
 
     homeEl.style.display = 'none';
     appEl.style.display = 'flex';
-    appEl.innerHTML = '<div class="nt-loading">⏳ 连接手机桥接中…</div>';
+    appEl.innerHTML = '<div class="nt-loading">⏳ 加载中…</div>';
 
-    const ready = await Bridge.waitForPhoneReady({ timeoutMs: 12000 });
-    if (!ready.ready) {
-        appEl.innerHTML = `<div class="nt-error">${Bridge.escapeHtml(ready.status?.message || '需要先加载 yuzuki-phone 插件')}</div>
-            <div style="text-align:center;margin-top:12px;"><button class="nt-mini-btn" id="nt-retry-bridge">重试</button>
-            <button class="nt-mini-btn" id="nt-back-home">返回</button></div>`;
-        appEl.querySelector('#nt-retry-bridge')?.addEventListener('click', () => openApp(appId));
-        appEl.querySelector('#nt-back-home')?.addEventListener('click', goHome);
-        return;
+    // 玩法集只写输入框，不强制手机桥接
+    if (appId !== 'playbook') {
+        const ready = await Bridge.waitForPhoneReady({ timeoutMs: 12000 });
+        if (!ready.ready) {
+            appEl.innerHTML = `<div class="nt-error">${Bridge.escapeHtml(ready.status?.message || '需要先加载 yuzuki-phone 插件')}</div>
+                <div style="text-align:center;margin-top:12px;"><button class="nt-mini-btn" id="nt-retry-bridge">重试</button>
+                <button class="nt-mini-btn" id="nt-back-home">返回</button></div>`;
+            appEl.querySelector('#nt-retry-bridge')?.addEventListener('click', () => openApp(appId));
+            appEl.querySelector('#nt-back-home')?.addEventListener('click', goHome);
+            return;
+        }
     }
 
     const storage = Bridge.getStorage();
@@ -262,18 +284,26 @@ async function openApp(appId) {
     appEl.appendChild(appWrap);
 
     try {
+        if (appId === 'playbook') {
+            const href = new URL('./apps/playbook/playbook.css', import.meta.url).href;
+            if (!document.querySelector(`link[data-nt-playbook]`)) {
+                const link = document.createElement('link');
+                link.rel = 'stylesheet';
+                link.href = href;
+                link.dataset.ntPlaybook = '1';
+                document.head.appendChild(link);
+            }
+        }
         const mod = await import(new URL(appModules[appId], import.meta.url).href);
-        const AppClass = mod[appId === 'navi' ? 'NaviApp' : 'EroLinksApp'];
+        const AppClass = mod[APP_CLASS[appId]];
         if (!AppClass) throw new Error('App 导出缺失');
         const shell = new TermShell(appContent);
         const inst = new AppClass(shell, storage);
         inst.phoneShell = shell;
-        const view = inst.view || inst.naviView || inst.erolinksView;
+        const view = inst.view || inst.naviView || inst.erolinksView || inst.playbookView;
         if (view) view.app = inst;
         inst.render();
-        if (titleEl) {
-            titleEl.textContent = appId === 'navi' ? '🎯 观测委托' : '🔗 EroLinks';
-        }
+        if (titleEl) titleEl.textContent = APP_TITLES[appId] || 'N.A.V.I. Terminal';
         window.NaviTerm.currentApp = inst;
         window.NaviTerm.currentAppId = appId;
     } catch (err) {
