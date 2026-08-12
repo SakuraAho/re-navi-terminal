@@ -2,7 +2,9 @@ import Bridge from '../../bridge.js';
 import { PACKS, getProject, getProjectFields, listProjectsByPack } from './catalog.js';
 import { buildExport } from './playbook-export.js';
 
-
+function isTruthy(v) {
+    return v === true || v === 'true' || v === '是' || v === '1' || v === 'on';
+}
 
 export class PlaybookView {
     constructor(app) {
@@ -18,6 +20,7 @@ export class PlaybookView {
         this._ensureDefaults();
         shell.setContent(this._html(), 'playbook-main');
         this._bind();
+        this._syncShowIf();
     }
 
     _ensureDefaults() {
@@ -26,7 +29,6 @@ export class PlaybookView {
             const list = listProjectsByPack(this.packId);
             this.projectId = list[0]?.id || '';
         }
-        // 若当前 pack 已无项目（如删掉的分类），回到第一个 pack
         if (!getProject(this.projectId) && !listProjectsByPack(this.packId).length) {
             this.packId = PACKS[0]?.id || 'exam';
             this.projectId = listProjectsByPack(this.packId)[0]?.id || '';
@@ -40,12 +42,6 @@ export class PlaybookView {
             }
         });
         this.values = next;
-    }
-
-    _fieldVisible(f) {
-        if (!f.showIf) return true;
-        const dep = this.values[f.showIf];
-        return dep === true || dep === 'true' || dep === '是' || dep === '1' || dep === 'on';
     }
 
     _html() {
@@ -64,8 +60,8 @@ export class PlaybookView {
         const preview = proj ? buildExport(proj, this.values) : '';
 
         return `
-<div class="pb-root">
-  <div class="pb-hint">选择玩法与参数，生成触发块并填入酒馆输入框。体检/运动会/学园祭/魔法道具可在本页联动排尿与绝顶（写入<strong>同一</strong>触发块，无需分两次填入）。正文由全局世界书提供。</div>
+<div class="pb-root" id="pb-scroll-root">
+  <div class="pb-hint">选择玩法与参数，生成触发块并填入酒馆输入框。体检/运动会/学园祭/魔法道具可在本页联动排尿与绝顶（写入<strong>同一</strong>触发块）。正文由全局世界书提供。</div>
   <div class="pb-packs">${packs}</div>
   <div class="pb-section-title">项目</div>
   <div class="pb-projs">${projects}</div>
@@ -85,11 +81,10 @@ export class PlaybookView {
         const fields = getProjectFields(proj);
         let bodySwitchHeader = false;
         return fields.map((f) => {
-            if (!this._fieldVisible(f)) return '';
             let head = '';
             if (f.group === 'bodySwitch' && !bodySwitchHeader) {
                 bodySwitchHeader = true;
-                head = `<div class="pb-section-title" style="margin-top:4px">身体开关联动</div>`;
+                head = `<div class="pb-section-title pb-body-switch-head" style="margin-top:4px">身体开关联动</div>`;
             }
             const val = this.values[f.id];
             const req = f.required ? ' <span class="pb-req">*</span>' : '';
@@ -103,13 +98,27 @@ export class PlaybookView {
                 }).join('');
                 control = `<select class="pb-input" data-field="${Bridge.escapeHtml(f.id)}">${opts}</select>`;
             } else if (f.type === 'toggle') {
-                const checked = val === true || val === 'true' || val === '是' ? ' checked' : '';
+                const checked = isTruthy(val) ? ' checked' : '';
                 control = `<label class="pb-toggle"><input type="checkbox" data-field="${Bridge.escapeHtml(f.id)}"${checked}/> 开启</label>`;
             } else {
                 control = `<input class="pb-input" type="text" data-field="${Bridge.escapeHtml(f.id)}" value="${Bridge.escapeHtml(val || '')}" placeholder="${Bridge.escapeHtml(f.placeholder || '')}"/>`;
             }
-            return `${head}<div class="pb-field"><div class="pb-label">${Bridge.escapeHtml(f.label || f.id)}${req}</div>${control}</div>`;
+            const showIf = f.showIf ? ` data-show-if="${Bridge.escapeHtml(f.showIf)}"` : '';
+            // 依赖字段默认 hidden，由 _syncShowIf 控制，避免整页重绘
+            const hiddenClass = f.showIf ? ' pb-field-dep' : '';
+            return `${head}<div class="pb-field${hiddenClass}"${showIf}><div class="pb-label">${Bridge.escapeHtml(f.label || f.id)}${req}</div>${control}</div>`;
         }).join('');
+    }
+
+    /** 按 checkbox 状态显示/隐藏依赖字段，不重绘整页 */
+    _syncShowIf() {
+        const root = this.app.phoneShell?.container;
+        if (!root) return;
+        root.querySelectorAll('.pb-field[data-show-if]').forEach((wrap) => {
+            const dep = wrap.getAttribute('data-show-if');
+            const on = isTruthy(this.values[dep]);
+            wrap.style.display = on ? '' : 'none';
+        });
     }
 
     _readFields() {
@@ -160,10 +169,7 @@ export class PlaybookView {
                 this._readFields();
                 const id = el.getAttribute('data-field');
                 if (id === 'urineOn' || id === 'orgasmOn') {
-                    const keep = { ...this.values };
-                    this.values = keep;
-                    this.render();
-                    return;
+                    this._syncShowIf();
                 }
                 this._refreshPreview();
             });

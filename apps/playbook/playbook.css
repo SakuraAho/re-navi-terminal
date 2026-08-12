@@ -17,3 +17,4 @@
 .pb-btn{border:1px solid rgba(255,255,255,0.14);background:rgba(255,255,255,0.06);color:#dce0f0;border-radius:8px;padding:8px 12px;font-size:12px;cursor:pointer;}
 .pb-btn-primary{background:#3d6fd8;border-color:#5b8def;color:#fff;}
 .pb-empty{font-size:12px;color:#7a8098;padding:8px;}
+.pb-field-dep{margin-left:8px;padding-left:8px;border-left:2px solid rgba(91,141,239,0.35);}
