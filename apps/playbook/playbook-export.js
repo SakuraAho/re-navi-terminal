@@ -1,10 +1,12 @@
 /** 统一触发块格式 —— 与全局玩法世界书条目标题/关键词对齐 */
 
+import { projectSupportsBodySwitch } from './catalog.js';
+
 const FOOTER_SCRIPT = '请根据已挂载的全局世界书中与「项目」名称对应的条目，遵循该玩法的规矩与流程展开。描写过程允许并鼓励意外、停顿、反复与戏剧性转折，按总纲的叙事基调自由演绎。本玩法为可选拓展；未写明的设定仍遵循当前世界书。不要复述本触发块条目列表。';
 
-const FOOTER_SWITCH = '请立即按已挂载世界书中对应开关系统的该等级与触发方式执行，详细展开过程。不要解释系统机制本身。';
-
 const FOOTER_REWRITE = '下一条叙述必须已是改写完全生效后的状态：禁止描写 APP 界面、適用瞬间、认知切换或角色察觉被改写。对象将新常识视为自古如此。';
+
+const FOOTER_BODY_SWITCH = '若触发块启用了排尿/绝顶联动，请同时遵循世界书「排尿开关系统」「绝顶开关系统」中对应等级与触发方式，与主玩法同一时间线展开，不要解释系统机制本身。';
 
 function yn(v) {
     if (v === true || v === 'true' || v === '1' || v === '是' || v === 'on') return '是';
@@ -16,6 +18,10 @@ function line(label, value) {
     const v = String(value ?? '').trim();
     if (!v) return '';
     return `${label}：${v}`;
+}
+
+function isOn(v) {
+    return yn(v) === '是';
 }
 
 /**
@@ -44,8 +50,6 @@ export function buildExport(project, values = {}) {
     if (v.part) lines.push(line('连接部位', v.part));
     if (v.aware) lines.push(line('对象知情', v.aware));
     if (v.intensity) lines.push(line('强度', v.intensity));
-    if (v.level) lines.push(line('等级', v.level));
-    if (v.mode) lines.push(line('模式', v.mode));
     if (v.segment) lines.push(line('本轮段落', v.segment));
     if (v.userRole) lines.push(line('用户身份', v.userRole));
     if (v.scene) lines.push(line('场合', v.scene));
@@ -54,9 +58,33 @@ export function buildExport(project, values = {}) {
     }
     if (v.note) lines.push(line('补充', v.note));
 
+    // 通用尿意/高潮联动（写入同一触发块，避免分两次覆盖输入框）
+    if (projectSupportsBodySwitch(project)) {
+        const urineOn = isOn(v.urineOn);
+        const orgasmOn = isOn(v.orgasmOn);
+        if (urineOn || orgasmOn) {
+            lines.push('');
+            lines.push('【身体开关联动】');
+            if (urineOn) {
+                lines.push(line('排尿开关', '启用'));
+                lines.push(line('排尿等级', v.urineLevel || '2'));
+                lines.push(line('排尿触发', v.urineMode || '尿意涌上'));
+                lines.push(line('排尿规则条目', '排尿开关系统'));
+            }
+            if (orgasmOn) {
+                lines.push(line('绝顶开关', '启用'));
+                lines.push(line('绝顶等级', v.orgasmLevel || '2'));
+                lines.push(line('绝顶触发', v.orgasmMode || '快感涌现'));
+                lines.push(line('绝顶规则条目', '绝顶开关系统'));
+            }
+        }
+    }
+
     lines.push('');
-    if (type === 'switch') lines.push(FOOTER_SWITCH);
-    else lines.push(FOOTER_SCRIPT);
+    lines.push(FOOTER_SCRIPT);
+    if (projectSupportsBodySwitch(project) && (isOn(v.urineOn) || isOn(v.orgasmOn))) {
+        lines.push(FOOTER_BODY_SWITCH);
+    }
 
     return lines.filter((l, i, a) => !(l === '' && a[i - 1] === '')).join('\n').trim() + '\n';
 }

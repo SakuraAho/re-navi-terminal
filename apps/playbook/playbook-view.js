@@ -1,6 +1,16 @@
 import Bridge from '../../bridge.js';
-import { PACKS, PROJECTS, getProject, listProjectsByPack } from './catalog.js';
+import { PACKS, getProject, getProjectFields, listProjectsByPack } from './catalog.js';
 import { buildExport } from './playbook-export.js';
+
+function setChatInput(text) {
+    const t = String(text || '');
+    const ta = document.getElementById('send_textarea');
+    if (!ta) return false;
+    ta.value = t;
+    ta.dispatchEvent(new Event('input', { bubbles: true }));
+    try { ta.focus(); } catch (_) {}
+    return true;
+}
 
 export class PlaybookView {
     constructor(app) {
@@ -24,15 +34,26 @@ export class PlaybookView {
             const list = listProjectsByPack(this.packId);
             this.projectId = list[0]?.id || '';
         }
+        // 若当前 pack 已无项目（如删掉的分类），回到第一个 pack
+        if (!getProject(this.projectId) && !listProjectsByPack(this.packId).length) {
+            this.packId = PACKS[0]?.id || 'exam';
+            this.projectId = listProjectsByPack(this.packId)[0]?.id || '';
+        }
         const proj = getProject(this.projectId);
         if (!proj) return;
         const next = { ...this.values };
-        (proj.fields || []).forEach((f) => {
+        getProjectFields(proj).forEach((f) => {
             if (next[f.id] === undefined || next[f.id] === null) {
                 next[f.id] = f.default !== undefined ? f.default : (f.type === 'toggle' ? false : '');
             }
         });
         this.values = next;
+    }
+
+    _fieldVisible(f) {
+        if (!f.showIf) return true;
+        const dep = this.values[f.showIf];
+        return dep === true || dep === 'true' || dep === '是' || dep === '1' || dep === 'on';
     }
 
     _html() {
@@ -52,7 +73,7 @@ export class PlaybookView {
 
         return `
 <div class="pb-root">
-  <div class="pb-hint">选择玩法与参数，生成触发块并填入酒馆输入框。正文由已挂载的全局世界书提供，本 App 不生成剧情。</div>
+  <div class="pb-hint">选择玩法与参数，生成触发块并<strong>覆盖</strong>填入酒馆输入框。体检/运动会/学园祭/魔法道具可联动排尿与绝顶（写入同一触发块）。正文由全局世界书提供。</div>
   <div class="pb-packs">${packs}</div>
   <div class="pb-section-title">项目</div>
   <div class="pb-projs">${projects}</div>
@@ -69,7 +90,15 @@ export class PlaybookView {
     }
 
     _fieldsHtml(proj) {
-        return (proj.fields || []).map((f) => {
+        const fields = getProjectFields(proj);
+        let bodySwitchHeader = false;
+        return fields.map((f) => {
+            if (!this._fieldVisible(f)) return '';
+            let head = '';
+            if (f.group === 'bodySwitch' && !bodySwitchHeader) {
+                bodySwitchHeader = true;
+                head = `<div class="pb-section-title" style="margin-top:4px">身体开关联动</div>`;
+            }
             const val = this.values[f.id];
             const req = f.required ? ' <span class="pb-req">*</span>' : '';
             let control = '';
@@ -87,7 +116,7 @@ export class PlaybookView {
             } else {
                 control = `<input class="pb-input" type="text" data-field="${Bridge.escapeHtml(f.id)}" value="${Bridge.escapeHtml(val || '')}" placeholder="${Bridge.escapeHtml(f.placeholder || '')}"/>`;
             }
-            return `<div class="pb-field"><div class="pb-label">${Bridge.escapeHtml(f.label || f.id)}${req}</div>${control}</div>`;
+            return `${head}<div class="pb-field"><div class="pb-label">${Bridge.escapeHtml(f.label || f.id)}${req}</div>${control}</div>`;
         }).join('');
     }
 
@@ -135,8 +164,21 @@ export class PlaybookView {
         });
 
         root.querySelectorAll('[data-field]').forEach((el) => {
-            el.addEventListener('change', () => this._refreshPreview());
-            el.addEventListener('input', () => this._refreshPreview());
+            el.addEventListener('change', () => {
+                this._readFields();
+                const id = el.getAttribute('data-field');
+                if (id === 'urineOn' || id === 'orgasmOn') {
+                    const keep = { ...this.values };
+                    this.values = keep;
+                    this.render();
+                    return;
+                }
+                this._refreshPreview();
+            });
+            el.addEventListener('input', () => {
+                if (el.type === 'checkbox') return;
+                this._refreshPreview();
+            });
         });
 
         root.querySelector('#pb-refresh')?.addEventListener('click', () => this._refreshPreview());
@@ -148,10 +190,10 @@ export class PlaybookView {
                 this.app.phoneShell?.showNotification?.('玩法集', '预览为空', '⚠️');
                 return;
             }
-            const ok = Bridge.appendToChatInput(text);
+            const ok = setChatInput(text);
             this.app.phoneShell?.showNotification?.(
                 '玩法集',
-                ok ? '已填入酒馆输入框' : '未找到输入框 #send_textarea',
+                ok ? '已覆盖填入输入框' : '未找到输入框 #send_textarea',
                 ok ? '✅' : '❌'
             );
         });

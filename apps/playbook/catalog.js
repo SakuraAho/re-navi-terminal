@@ -13,10 +13,33 @@ export const PACKS = [
     { id: 'exam', name: '体检', icon: '🩺' },
     { id: 'sports', name: '大运动会', icon: '🏅' },
     { id: 'festival', name: '学园祭', icon: '🎪' },
-    { id: 'switch', name: '尿意＆高潮', icon: '⚡' },
-    { id: 'rewrite', name: '常识改变', icon: '🧠' },
-    { id: 'magic', name: '魔法道具', icon: '✨' }
+    { id: 'magic', name: '魔法道具', icon: '✨' },
+    { id: 'rewrite', name: '常识改变', icon: '🧠' }
 ];
+
+/** 体检/运动会/学园祭/魔法道具 通用：尿意＆高潮联动（常识改变不加） */
+export const PACKS_WITH_BODY_SWITCH = new Set(['exam', 'sports', 'festival', 'magic']);
+
+export const COMMON_BODY_SWITCH_FIELDS = [
+    { id: 'urineOn', label: '联动·排尿开关', type: 'toggle', default: false, group: 'bodySwitch' },
+    { id: 'urineLevel', label: '排尿等级', type: 'select', options: ['1', '2', '3', '4'], default: '2', group: 'bodySwitch', showIf: 'urineOn' },
+    { id: 'urineMode', label: '排尿触发', type: 'select', options: ['尿意涌上', '强制排尿'], default: '尿意涌上', group: 'bodySwitch', showIf: 'urineOn' },
+    { id: 'orgasmOn', label: '联动·绝顶开关', type: 'toggle', default: false, group: 'bodySwitch' },
+    { id: 'orgasmLevel', label: '绝顶等级', type: 'select', options: ['1', '2', '3', '4'], default: '2', group: 'bodySwitch', showIf: 'orgasmOn' },
+    { id: 'orgasmMode', label: '绝顶触发', type: 'select', options: ['快感涌现', '强制绝顶'], default: '快感涌现', group: 'bodySwitch', showIf: 'orgasmOn' }
+];
+
+export function projectSupportsBodySwitch(project) {
+    return !!(project && PACKS_WITH_BODY_SWITCH.has(project.packId) && project.type !== 'system');
+}
+
+/** 合并项目字段 + 通用尿意/高潮字段 */
+export function getProjectFields(project) {
+    if (!project) return [];
+    const base = Array.isArray(project.fields) ? project.fields : [];
+    if (!projectSupportsBodySwitch(project)) return base;
+    return [...base, ...COMMON_BODY_SWITCH_FIELDS];
+}
 
 /** @type {Array<object>} */
 export const PROJECTS = [
@@ -197,32 +220,6 @@ export const PROJECTS = [
             { id: 'chars', label: '托盘少女', type: 'text', required: true },
             { id: 'segment', label: '本轮段落', type: 'select', options: ['摆盘', '品鉴', '清理', '完整活动'], default: '品鉴' },
             { id: 'userRole', label: '用户身份', type: 'select', options: ['品鉴者', '摆盘部员', '旁观'], default: '品鉴者' }
-        ]
-    },
-
-    // —— 开关 ——
-    {
-        id: 'sw_urine',
-        packId: 'switch',
-        name: '排尿开关',
-        worldbookKey: '排尿开关系统',
-        type: 'switch',
-        fields: [
-            { id: 'chars', label: '对象', type: 'text', required: true },
-            { id: 'level', label: '等级', type: 'select', options: ['1', '2', '3', '4'], default: '2' },
-            { id: 'mode', label: '触发方式', type: 'select', options: ['尿意涌上', '强制排尿'], default: '尿意涌上' }
-        ]
-    },
-    {
-        id: 'sw_orgasm',
-        packId: 'switch',
-        name: '绝顶开关',
-        worldbookKey: '绝顶开关系统',
-        type: 'switch',
-        fields: [
-            { id: 'chars', label: '对象', type: 'text', required: true },
-            { id: 'level', label: '等级', type: 'select', options: ['1', '2', '3', '4'], default: '2' },
-            { id: 'mode', label: '触发方式', type: 'select', options: ['快感涌现', '强制绝顶'], default: '快感涌现' }
         ]
     },
 
