@@ -52,19 +52,11 @@ export function buildExport(project, values = {}) {
     if (Object.prototype.hasOwnProperty.call(v, 'accidents')) {
         lines.push(line('意外场景', yn(v.accidents)));
     }
-    if (Object.prototype.hasOwnProperty.call(v, 'refOutline') && yn(v.refOutline) === '是') {
-        lines.push(line('基调条目', '大运动会·总纲'));
-    }
     if (v.note) lines.push(line('补充', v.note));
 
     lines.push('');
     if (type === 'switch') lines.push(FOOTER_SWITCH);
-    else if (project.packId === 'sports' && project.id !== 'sports_outline') {
-        lines.push(FOOTER_SCRIPT);
-        if (Object.prototype.hasOwnProperty.call(v, 'refOutline') && yn(v.refOutline) === '是') {
-            lines.push('叙事基调同时遵循世界书「大运动会·总纲」（选手主体性、陌生感、竞技色气、双层赛场氛围）。');
-        }
-    } else lines.push(FOOTER_SCRIPT);
+    else lines.push(FOOTER_SCRIPT);
 
     return lines.filter((l, i, a) => !(l === '' && a[i - 1] === '')).join('\n').trim() + '\n';
 }

@@ -75,17 +75,7 @@ export const PROJECTS = [
         ]
     },
 
-    // —— 大运动会 2.0（与世界书条目对齐；总纲可勾选引用）——
-    {
-        id: 'sports_outline',
-        packId: 'sports',
-        name: '大运动会·总纲',
-        worldbookKey: '大运动会·总纲',
-        type: 'script',
-        fields: [
-            { id: 'note', label: '补充（可选）', type: 'text', placeholder: '如：强调选手主体性 / 仅作基调提醒' }
-        ]
-    },
+    // —— 大运动会（2.0 已更段落；其余旧项保留待更新）——
     {
         id: 'sports_nipple',
         packId: 'sports',
@@ -95,8 +85,7 @@ export const PROJECTS = [
         fields: [
             { id: 'chars', label: '选手', type: 'text', required: true },
             { id: 'segment', label: '本轮段落', type: 'select', options: ['赛前准备', '起步', '中段', '脱落', '末段与冲线', '冲线后', '完整场次'], default: '中段' },
-            { id: 'userRole', label: '用户身份', type: 'select', options: ['观众', '裁判', '选手'], default: '观众' },
-            { id: 'refOutline', label: '同时引用总纲', type: 'toggle', default: true }
+            { id: 'userRole', label: '用户身份', type: 'select', options: ['观众', '裁判', '选手'], default: '观众' }
         ]
     },
     {
@@ -109,8 +98,7 @@ export const PROJECTS = [
             { id: 'chars', label: '本棒/交棒选手', type: 'text', required: true },
             { id: 'charsNext', label: '接棒选手（可选）', type: 'text', placeholder: '交接时填写' },
             { id: 'segment', label: '本轮段落', type: 'select', options: ['赛前准备', '跑动', '交接', '冲线后', '完整场次'], default: '跑动' },
-            { id: 'userRole', label: '用户身份', type: 'select', options: ['观众', '裁判', '接棒操作者', '选手'], default: '观众' },
-            { id: 'refOutline', label: '同时引用总纲', type: 'toggle', default: true }
+            { id: 'userRole', label: '用户身份', type: 'select', options: ['观众', '裁判', '接棒操作者', '选手'], default: '观众' }
         ]
     },
     {
@@ -122,8 +110,79 @@ export const PROJECTS = [
         fields: [
             { id: 'chars', label: '选手', type: 'text', required: true },
             { id: 'segment', label: '本轮段落', type: 'select', options: ['赛前准备', '起始段', '中段', '落水', '末段与冲线', '冲线后', '完整场次'], default: '中段' },
-            { id: 'userRole', label: '用户身份', type: 'select', options: ['观众', '裁判', '选手'], default: '观众' },
-            { id: 'refOutline', label: '同时引用总纲', type: 'toggle', default: true }
+            { id: 'userRole', label: '用户身份', type: 'select', options: ['观众', '裁判', '选手'], default: '观众' }
+        ]
+    },
+    {
+        id: 'sports_dive',
+        packId: 'sports',
+        name: '大运动会·深潜寻宝赛',
+        worldbookKey: '大运动会·深潜寻宝赛',
+        type: 'script',
+        fields: [
+            { id: 'chars', label: '选手', type: 'text', required: true },
+            { id: 'segment', label: '本轮段落', type: 'select', options: ['赛前入水', '水下寻宝', '气泡冲击', '上浮换气', '完整场次'], default: '水下寻宝' },
+            { id: 'userRole', label: '用户身份', type: 'select', options: ['池外观众', '选手'], default: '池外观众' }
+        ]
+    },
+    {
+        id: 'sports_sumo',
+        packId: 'sports',
+        name: '大运动会·臀相扑',
+        worldbookKey: '大运动会·臀相扑',
+        type: 'script',
+        fields: [
+            { id: 'chars', label: '双方选手', type: 'text', placeholder: '甲、乙', required: true },
+            { id: 'segment', label: '本轮段落', type: 'select', options: ['赛前涂凝胶', '对抗', '分出胜负', '完整场次'], default: '对抗' },
+            { id: 'userRole', label: '用户身份', type: 'select', options: ['观众', '裁判', '选手之一'], default: '观众' }
+        ]
+    },
+    {
+        id: 'sports_pose',
+        packId: 'sports',
+        name: '大运动会·自然形体姿态展',
+        worldbookKey: '大运动会·自然形体姿态展',
+        type: 'script',
+        fields: [
+            { id: 'chars', label: '选手', type: 'text', required: true },
+            { id: 'segment', label: '本轮段落', type: 'select', options: ['抽选登台', '姿态维持', '换姿/结束', '完整场次'], default: '姿态维持' },
+            { id: 'userRole', label: '用户身份', type: 'select', options: ['台下仰视观众', '侧面观众', '选手'], default: '台下仰视观众' }
+        ]
+    },
+    {
+        id: 'sports_climb',
+        packId: 'sports',
+        name: '大运动会·软胶攀岩赛',
+        worldbookKey: '大运动会·软胶攀岩赛',
+        type: 'script',
+        fields: [
+            { id: 'chars', label: '选手', type: 'text', required: true },
+            { id: 'segment', label: '本轮段落', type: 'select', options: ['赛前', '攀登', '坠落胶池', '登顶', '完整场次'], default: '攀登' },
+            { id: 'userRole', label: '用户身份', type: 'select', options: ['观众', '选手'], default: '观众' }
+        ]
+    },
+    {
+        id: 'sports_press',
+        packId: 'sports',
+        name: '大运动会·透明挤压舱',
+        worldbookKey: '大运动会·透明挤压舱',
+        type: 'script',
+        fields: [
+            { id: 'chars', label: '选手', type: 'text', required: true },
+            { id: 'segment', label: '本轮点位', type: 'select', options: ['乳尖', '乳房正面', '乳房侧面', '小穴正面', '完整四项'], default: '完整四项' },
+            { id: 'userRole', label: '用户身份', type: 'select', options: ['舱外观众', '选手'], default: '舱外观众' }
+        ]
+    },
+    {
+        id: 'sports_slime',
+        packId: 'sports',
+        name: '大运动会·黏滑百米竞速',
+        worldbookKey: '大运动会·黏滑百米竞速',
+        type: 'script',
+        fields: [
+            { id: 'chars', label: '选手', type: 'text', required: true },
+            { id: 'segment', label: '本轮段落', type: 'select', options: ['赛前涂乳胶', '行进', '完赛', '完整场次'], default: '行进' },
+            { id: 'userRole', label: '用户身份', type: 'select', options: ['观众', '选手'], default: '观众' }
         ]
     },
 
