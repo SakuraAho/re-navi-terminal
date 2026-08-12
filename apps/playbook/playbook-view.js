@@ -2,15 +2,7 @@ import Bridge from '../../bridge.js';
 import { PACKS, getProject, getProjectFields, listProjectsByPack } from './catalog.js';
 import { buildExport } from './playbook-export.js';
 
-function setChatInput(text) {
-    const t = String(text || '');
-    const ta = document.getElementById('send_textarea');
-    if (!ta) return false;
-    ta.value = t;
-    ta.dispatchEvent(new Event('input', { bubbles: true }));
-    try { ta.focus(); } catch (_) {}
-    return true;
-}
+
 
 export class PlaybookView {
     constructor(app) {
@@ -73,7 +65,7 @@ export class PlaybookView {
 
         return `
 <div class="pb-root">
-  <div class="pb-hint">选择玩法与参数，生成触发块并<strong>覆盖</strong>填入酒馆输入框。体检/运动会/学园祭/魔法道具可联动排尿与绝顶（写入同一触发块）。正文由全局世界书提供。</div>
+  <div class="pb-hint">选择玩法与参数，生成触发块并填入酒馆输入框。体检/运动会/学园祭/魔法道具可在本页联动排尿与绝顶（写入<strong>同一</strong>触发块，无需分两次填入）。正文由全局世界书提供。</div>
   <div class="pb-packs">${packs}</div>
   <div class="pb-section-title">项目</div>
   <div class="pb-projs">${projects}</div>
@@ -190,10 +182,10 @@ export class PlaybookView {
                 this.app.phoneShell?.showNotification?.('玩法集', '预览为空', '⚠️');
                 return;
             }
-            const ok = setChatInput(text);
+            const ok = Bridge.appendToChatInput(text);
             this.app.phoneShell?.showNotification?.(
                 '玩法集',
-                ok ? '已覆盖填入输入框' : '未找到输入框 #send_textarea',
+                ok ? '已填入酒馆输入框' : '未找到输入框 #send_textarea',
                 ok ? '✅' : '❌'
             );
         });
