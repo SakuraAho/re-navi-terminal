@@ -204,8 +204,8 @@ export const PROJECTS = [
         type: 'script',
         fields: [
             { id: 'chars', label: '选手', type: 'text', required: true },
-            { id: 'segment', label: '本轮段落', type: 'select', options: ['赛前涂乳胶', '行进', '完赛', '完整场次'], default: '行进' },
-            { id: 'userRole', label: '用户身份', type: 'select', options: ['观众', '选手'], default: '观众' }
+            { id: 'segment', label: '本轮段落', type: 'select', options: ['赛前准备', '起步', '中段', '乳胶全线崩溃与失控', '末段与冲线', '冲线后', '完整场次'], default: '中段' },
+            { id: 'userRole', label: '用户身份', type: 'select', options: ['观众', '裁判', '选手'], default: '观众' }
         ]
     },
 
