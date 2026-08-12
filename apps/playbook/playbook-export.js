@@ -39,19 +39,32 @@ export function buildExport(project, values = {}) {
 
     const chars = String(v.chars || '').trim();
     if (chars) lines.push(line('对象', chars));
+    if (v.holder) lines.push(line('持有者', v.holder));
     if (v.charsNext) lines.push(line('接棒/关联', v.charsNext));
+    if (v.part) lines.push(line('连接部位', v.part));
+    if (v.aware) lines.push(line('对象知情', v.aware));
+    if (v.intensity) lines.push(line('强度', v.intensity));
     if (v.level) lines.push(line('等级', v.level));
     if (v.mode) lines.push(line('模式', v.mode));
     if (v.segment) lines.push(line('本轮段落', v.segment));
     if (v.userRole) lines.push(line('用户身份', v.userRole));
+    if (v.scene) lines.push(line('场合', v.scene));
     if (Object.prototype.hasOwnProperty.call(v, 'accidents')) {
         lines.push(line('意外场景', yn(v.accidents)));
+    }
+    if (Object.prototype.hasOwnProperty.call(v, 'refOutline') && yn(v.refOutline) === '是') {
+        lines.push(line('基调条目', '大运动会·总纲'));
     }
     if (v.note) lines.push(line('补充', v.note));
 
     lines.push('');
     if (type === 'switch') lines.push(FOOTER_SWITCH);
-    else lines.push(FOOTER_SCRIPT);
+    else if (project.packId === 'sports' && project.id !== 'sports_outline') {
+        lines.push(FOOTER_SCRIPT);
+        if (Object.prototype.hasOwnProperty.call(v, 'refOutline') && yn(v.refOutline) === '是') {
+            lines.push('叙事基调同时遵循世界书「大运动会·总纲」（选手主体性、陌生感、竞技色气、双层赛场氛围）。');
+        }
+    } else lines.push(FOOTER_SCRIPT);
 
     return lines.filter((l, i, a) => !(l === '' && a[i - 1] === '')).join('\n').trim() + '\n';
 }
