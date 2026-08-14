@@ -48,6 +48,8 @@ export function buildExport(project, values = {}) {
     if (v.holder) lines.push(line('持有者', v.holder));
     if (v.charsNext) lines.push(line('接棒/关联', v.charsNext));
     if (v.part) lines.push(line('连接部位', v.part));
+    if (v.cavitySync) lines.push(line('内腔同步', v.cavitySync));
+    if (v.poseLink) lines.push(line('姿态连动', v.poseLink));
     if (v.aware) lines.push(line('对象知情', v.aware));
     if (v.intensity) lines.push(line('强度', v.intensity));
     if (v.segment) lines.push(line('本轮段落', v.segment));

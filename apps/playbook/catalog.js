@@ -270,7 +270,7 @@ export const PROJECTS = [
         ]
     },
 
-    // —— 魔法道具（测试）——
+    // —— 魔法道具 ——
     {
         id: 'magic_onahole',
         packId: 'magic',
@@ -285,6 +285,23 @@ export const PROJECTS = [
             { id: 'intensity', label: '强度', type: 'select', options: ['轻', '中', '强'], default: '中' },
             { id: 'segment', label: '本轮段落', type: 'select', options: ['建立连接', '使用中', '暂停/断开', '完整过程'], default: '使用中' },
             { id: 'scene', label: '场合补充（可选）', type: 'text', placeholder: '如：对方正在上课/走路' }
+        ]
+    },
+    {
+        id: 'magic_empathy_doll',
+        packId: 'magic',
+        name: '共感人偶',
+        worldbookKey: '共感人偶',
+        type: 'script',
+        fields: [
+            { id: 'holder', label: '持有者', type: 'text', placeholder: '操控人偶的一方', required: true },
+            { id: 'chars', label: '连接对象', type: 'text', placeholder: '被塑形/同步的一方', required: true },
+            { id: 'cavitySync', label: '内腔同步', type: 'select', options: ['关', '阴道', '肛门'], default: '关' },
+            { id: 'poseLink', label: '姿态连动', type: 'select', options: ['关', '开'], default: '关' },
+            { id: 'aware', label: '对象是否知情', type: 'select', options: ['不知情', '知情'], default: '不知情' },
+            { id: 'intensity', label: '强度', type: 'select', options: ['轻', '中', '强'], default: '中' },
+            { id: 'segment', label: '本轮段落', type: 'select', options: ['塑形', '使用中', '暂停/断开', '完整过程'], default: '使用中' },
+            { id: 'scene', label: '场合补充（可选）', type: 'text', placeholder: '如：对方正在走路/上课' }
         ]
     }
 ];
