@@ -232,7 +232,7 @@ export const PROJECTS = [
             { id: 'chars', label: '体验者', type: 'text', required: true },
             { id: 'segment', label: '本轮段落', type: 'select', options: ['观摩与植入', '游走与绑定', '器官生成与联动反应', '回收与事后', '完整活动'], default: '器官生成与联动反应' },
             { id: 'organ', label: '实体器官（可选）', type: 'select', options: ['系统随机', '尾巴', '翅膀', '犄角'], default: '系统随机' },
-            { id: 'userRole', label: '用户身份', type: 'select', options: ['展出者/辅助植入', '同伴', '观众', '体验者'], default: '展出者/辅助植入' }
+            { id: 'userRole', label: '用户身份', type: 'select', options: ['辅助植入', '同伴', '观众', '体验者'], default: '辅助植入' }
         ]
     },
 
