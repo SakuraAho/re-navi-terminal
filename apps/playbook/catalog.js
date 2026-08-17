@@ -219,6 +219,7 @@ export const PROJECTS = [
         fields: [
             { id: 'chars', label: '体验者', type: 'text', required: true },
             { id: 'pose', label: '姿势', type: 'select', options: ['仰躺模式', '趴姿模式'], default: '仰躺模式' },
+            { id: 'utensil', label: '品鉴道具', type: 'select', options: ['不限', '勺子', '筷子', '叉子', '裱花袋', '镊子', '唇舌'], default: '不限' },
             { id: 'segment', label: '本轮段落', type: 'select', options: ['检测与摆盘', '品鉴前半', '品鉴后半', '完整活动'], default: '检测与摆盘' },
             { id: 'userRole', label: '用户身份', type: 'select', options: ['品鉴者', '展出者', '体验者', '旁观'], default: '品鉴者' }
         ]
