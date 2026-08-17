@@ -213,13 +213,14 @@ export const PROJECTS = [
     {
         id: 'fest_dessert',
         packId: 'festival',
-        name: '甜点部·体温甜品托盘',
-        worldbookKey: '甜点部·体温甜品托盘',
+        name: '甜点社团·体温甜品托盘',
+        worldbookKey: '甜点社团·体温甜品托盘',
         type: 'script',
         fields: [
-            { id: 'chars', label: '托盘少女', type: 'text', required: true },
-            { id: 'segment', label: '本轮段落', type: 'select', options: ['摆盘', '品鉴', '清理', '完整活动'], default: '品鉴' },
-            { id: 'userRole', label: '用户身份', type: 'select', options: ['品鉴者', '摆盘部员', '旁观'], default: '品鉴者' }
+            { id: 'chars', label: '体验者', type: 'text', required: true },
+            { id: 'pose', label: '姿势', type: 'select', options: ['仰躺模式', '趴姿模式'], default: '仰躺模式' },
+            { id: 'segment', label: '本轮段落', type: 'select', options: ['检测与摆盘', '品鉴前半', '品鉴后半', '完整活动'], default: '检测与摆盘' },
+            { id: 'userRole', label: '用户身份', type: 'select', options: ['品鉴者', '展出者', '体验者', '旁观'], default: '品鉴者' }
         ]
     },
     {

@@ -51,6 +51,7 @@ export function buildExport(project, values = {}) {
     if (v.cavitySync) lines.push(line('内腔同步', v.cavitySync));
     if (v.poseLink) lines.push(line('姿态连动', v.poseLink));
     if (v.organ) lines.push(line('实体器官', v.organ));
+    if (v.pose) lines.push(line('姿势', v.pose));
     if (v.aware) lines.push(line('对象知情', v.aware));
     if (v.intensity) lines.push(line('强度', v.intensity));
     if (v.segment) lines.push(line('本轮段落', v.segment));
